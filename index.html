@@ -122,6 +122,9 @@
   .vplay{border:none;cursor:pointer;width:36px;height:36px;flex:none;border-radius:50%;color:#fff;font-size:13px;background:var(--mint-d);box-shadow:0 5px 12px rgba(107,191,151,.35)}
   .vitem .vn{flex:1;font-size:12.5px;font-weight:700;color:#2f5d53}
   .vitem .vt{font-size:11px;color:var(--muted)}
+  .vmain{flex:1;min-width:0}
+  .vname{width:100%;border:1px solid #cfe6d8;border-radius:10px;padding:6px 9px;font-family:inherit;font-size:12.5px;font-weight:700;color:#2f5d53;background:#fff}
+  .vname:focus{outline:2px solid var(--mint-d)}
   .vpick{border:none;background:none;cursor:pointer;font-size:16px;color:var(--gold-d);padding:2px}
   .vdel{border:none;background:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px}
   .vdel:hover{color:var(--rose-d)}
@@ -254,14 +257,14 @@
   const N=STAGES.length, STEP=360/N;
   const SEC=[["agent","💬","agent"],["maliwan","🖐️","maliwan"],["kursanci","🧑‍🎓","kursanci"],["uwaga","⚠️","uwaga"],["sum","🌸","sum"]];
   const L={
-    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",wordBtn:"Notatki (Word)",docsHead:"Materiały",voicesHead:"Głosówki",voicesEmpty:"Miejsce na głosówki — włącz tryb ✏️ Tworzenie i nagraj.",recBtn:"Nagraj głosówkę",recStop:"Zatrzymaj",docSoon:"📎 Dokument dodamy z bazy — zostaw link w Excelu",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
+    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",wordBtn:"Notatki (Word)",docsHead:"Materiały",voicesHead:"Głosówki",voicesEmpty:"Miejsce na głosówki — włącz tryb ✏️ Tworzenie i nagraj.",recBtn:"Nagraj głosówkę",recStop:"Zatrzymaj",voiceTitlePh:"O czym jest ta głosówka? (np. wprowadzenie)",docSoon:"📎 Dokument dodamy z bazy — zostaw link w Excelu",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
       leg:["zrobione","teraz","przed nami","wybrany"],note:"Klikaj etapy na kole (ożywają), a w panelu ▶ agent <b>czyta na głos</b>. Na dole: 🪷 tłumacz i 🎙️ nagrania.",
       sec:{agent:"Agent mówi",maliwan:"Maliwan pokazuje",kursanci:"Kursanci robią",uwaga:"Na co uważać",sum:"Podsumowanie"},
       media:"Film / zdjęcie instruktażowe",mediaHint:"(miejsce na materiał — dodamy z bazy)",listen:"▶ Posłuchaj",stop:"■ Stop",qhead:"Pytania kursantów",
       trTitle:"Tłumacz na żywo",trKb:"📚 baza wiedzy: Thai Maliwan Academy",micB:"Agent słucha…",micD:"Maliwan lub kursant mówi w swoim języku — agent tłumaczy i odpowiada.",
       inLabel:"Pytanie po:",sim:"🎤 Symuluj pytanie Maliwan",close:"Zamknij ✕",who:"🖐️ Maliwan pyta",arrow:"▾ agent odpowiada z bazy wiedzy ▾",ansToast:"🪷 Agent odpowiedział w 4 językach",
       recTitle:"Nagrania sesji",recSub:"Wejścia głosowe agenta z dzisiejszego dnia — odtwórz, przewiń, udostępnij.",recMeta:"głos agenta",langToast:"Język: Polski",speakToast:"🔊 Agent czyta na głos…"},
-    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",wordBtn:"บันทึก (Word)",docsHead:"สื่อและเอกสาร",voicesHead:"เสียงบันทึก",voicesEmpty:"พื้นที่เสียงบันทึก — เปิดโหมด ✏️ Tworzenie แล้วบันทึก",recBtn:"บันทึกเสียง",recStop:"หยุด",docSoon:"📎 จะเพิ่มเอกสารจากฐานข้อมูล",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
+    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",wordBtn:"บันทึก (Word)",docsHead:"สื่อและเอกสาร",voicesHead:"เสียงบันทึก",voicesEmpty:"พื้นที่เสียงบันทึก — เปิดโหมด ✏️ Tworzenie แล้วบันทึก",recBtn:"บันทึกเสียง",recStop:"หยุด",voiceTitlePh:"เสียงนี้เกี่ยวกับอะไร? (เช่น บทนำ)",docSoon:"📎 จะเพิ่มเอกสารจากฐานข้อมูล",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
       leg:["เสร็จแล้ว","ตอนนี้","ถัดไป","ที่เลือก"],note:"แตะขั้นตอนบนวงล้อ แล้วในแผงกด ▶ เอเจนต์จะ<b>อ่านออกเสียง</b> ด้านล่าง: 🪷 ล่าม และ 🎙️ บันทึก",
       sec:{agent:"เอเจนต์พูด",maliwan:"มะลิวัลย์สาธิต",kursanci:"ผู้เรียนฝึก",uwaga:"ข้อควรระวัง",sum:"สรุป"},
       media:"วิดีโอ / ภาพประกอบ",mediaHint:"(พื้นที่สำหรับสื่อ — จะเพิ่มจากฐานข้อมูล)",listen:"▶ ฟัง",stop:"■ หยุด",qhead:"คำถามผู้เรียน",
@@ -309,10 +312,11 @@
     if(mediaRec&&mediaRec.state==='recording'){mediaRec.stop();return;}
     try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRec=new MediaRecorder(stream);recChunks=[];
       mediaRec.ondataavailable=e=>recChunks.push(e.data);
-      mediaRec.onstop=()=>{const blob=new Blob(recChunks,{type:'audio/webm'});const fr=new FileReader();fr.onloadend=()=>{overrides[active]=overrides[active]||{};overrides[active].voices=overrides[active].voices||[];overrides[active].voices.push({n:(field==='agent'?L[lang].sec.agent:L[lang].sec.sum),t:new Date().toLocaleTimeString().slice(0,5),url:fr.result});saveOverrides();renderStage();toast('🎧 Głosówka zapisana');};fr.readAsDataURL(blob);stream.getTracks().forEach(t=>t.stop());};
+      mediaRec.onstop=()=>{const blob=new Blob(recChunks,{type:'audio/webm'});const fr=new FileReader();fr.onloadend=()=>{overrides[active]=overrides[active]||{};overrides[active].voices=overrides[active].voices||[];overrides[active].voices.push({n:'',t:new Date().toLocaleTimeString().slice(0,5),url:fr.result});saveOverrides();renderStage();toast('🎧 Głosówka zapisana — dopisz o czym jest');};fr.readAsDataURL(blob);stream.getTracks().forEach(t=>t.stop());};
       mediaRec.start();btn.classList.add('rec');btn.textContent='■ '+L[lang].recStop;toast('🔴 Nagrywam… kliknij, by zatrzymać');
     }catch(e){toast('Brak dostępu do mikrofonu');}
   };
+  window.renameVoice=(i,val)=>{if(overrides[active]&&overrides[active].voices&&overrides[active].voices[i]){overrides[active].voices[i].n=val;saveOverrides();}};
   window.pickVoice=(i)=>{overrides[active]=overrides[active]||{};overrides[active].activeVoice=i;saveOverrides();renderStage();toast('★ Wybrano tę głosówkę');};
   window.delVoice=(i)=>{if(!(overrides[active]&&overrides[active].voices))return;overrides[active].voices.splice(i,1);const av=overrides[active].activeVoice;if(av===i)delete overrides[active].activeVoice;else if(typeof av==='number'&&av>i)overrides[active].activeVoice=av-1;saveOverrides();renderStage();toast('🗑 Usunięto głosówkę');};
 
@@ -343,7 +347,7 @@
     const av=(overrides[active]&&overrides[active].activeVoice);
     const agentTxt=T2('agent'), sumTxt=T2('sum');
     const voicesHtml = recV.length
-      ? recV.map((v,vi)=>`<div class="vitem ${av===vi?'sel':''}"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><span class="vn">${v.n}${av===vi?' · ✓ ta gra':''}</span><span class="vt">${v.t||''}</span><button class="vpick" title="Wybierz tę głosówkę" onclick="pickVoice(${vi})">${av===vi?'★':'☆'}</button><button class="vdel" title="Usuń" onclick="delVoice(${vi})">🗑</button></div>`).join('')
+      ? recV.map((v,vi)=>`<div class="vitem ${av===vi?'sel':''}"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><div class="vmain">${editMode?`<input class="vname" value="${(v.n||'').replace(/"/g,'&quot;')}" oninput="renameVoice(${vi},this.value)" placeholder="${T.voiceTitlePh}">`:`<div class="vn">${v.n||'🎧 Głosówka'}${av===vi?' · ✓ ta gra':''}</div>`}<div class="vt">🕒 ${v.t||''}</div></div><button class="vpick" title="Wybierz tę głosówkę" onclick="pickVoice(${vi})">${av===vi?'★':'☆'}</button><button class="vdel" title="Usuń" onclick="delVoice(${vi})">🗑</button></div>`).join('')
       : `<div class="vempty">${T.voicesEmpty}</div>`;
     document.getElementById('stageBody').innerHTML=`
       <div class="mhead"><div class="mtitle"><svg class="lot"><use href="#lotus"/></svg> ${T.etap} ${active+1}/${N}</div><div class="mclose" onclick="closeStage()">${T.close}</div></div>
