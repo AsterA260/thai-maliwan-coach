@@ -116,11 +116,15 @@
   .docgrid{display:flex;gap:8px;flex-wrap:wrap}
   .docbtn{border:1px solid #e6dccb;background:#fffdf7;color:#7a6636;font-weight:700;font-size:12.5px;padding:9px 14px;border-radius:16px;cursor:pointer;transition:.15s}
   .docbtn:hover{background:#fbf3e0;transform:translateY(-1px)}
-  .vitem{display:flex;align-items:center;gap:10px;background:#fdf4f7;border:1px solid var(--rose-soft);border-radius:14px;padding:8px 11px;margin-bottom:7px}
+  .vitem{display:flex;align-items:center;gap:10px;background:linear-gradient(120deg,#fff,#eef7f1);border:1px solid #d7ecdf;border-radius:16px;padding:9px 12px;margin-bottom:8px}
   .vitem:last-child{margin-bottom:0}
-  .vplay{border:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:50%;color:#fff;font-size:13px;background:var(--rose-d);box-shadow:0 5px 12px rgba(211,128,155,.35)}
-  .vitem .vn{flex:1;font-size:12.5px;font-weight:600}
+  .vitem.sel{border-color:var(--mint-d);box-shadow:0 0 0 2px rgba(107,191,151,.28)}
+  .vplay{border:none;cursor:pointer;width:36px;height:36px;flex:none;border-radius:50%;color:#fff;font-size:13px;background:var(--mint-d);box-shadow:0 5px 12px rgba(107,191,151,.35)}
+  .vitem .vn{flex:1;font-size:12.5px;font-weight:700;color:#2f5d53}
   .vitem .vt{font-size:11px;color:var(--muted)}
+  .vpick{border:none;background:none;cursor:pointer;font-size:16px;color:var(--gold-d);padding:2px}
+  .vdel{border:none;background:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px}
+  .vdel:hover{color:var(--rose-d)}
   .vempty{font-size:12px;color:var(--muted);font-style:italic}
   /* translator */
   .live-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#fff;background:var(--rose-d);padding:4px 12px;border-radius:20px}
@@ -309,6 +313,8 @@
       mediaRec.start();btn.classList.add('rec');btn.textContent='■ '+L[lang].recStop;toast('🔴 Nagrywam… kliknij, by zatrzymać');
     }catch(e){toast('Brak dostępu do mikrofonu');}
   };
+  window.pickVoice=(i)=>{overrides[active]=overrides[active]||{};overrides[active].activeVoice=i;saveOverrides();renderStage();toast('★ Wybrano tę głosówkę');};
+  window.delVoice=(i)=>{if(!(overrides[active]&&overrides[active].voices))return;overrides[active].voices.splice(i,1);const av=overrides[active].activeVoice;if(av===i)delete overrides[active].activeVoice;else if(typeof av==='number'&&av>i)overrides[active].activeVoice=av-1;saveOverrides();renderStage();toast('🗑 Usunięto głosówkę');};
 
   STAGES.forEach((s,idx)=>{const base=-90+idx*STEP,ang=base*Math.PI/180;const x=C+R*Math.cos(ang),y=C+R*Math.sin(ang);
     const b=document.createElement('div');b.className='node '+s.st;b.style.left=x+'px';b.style.top=y+'px';
@@ -334,10 +340,10 @@
       : `<div class="st-media"><div class="pl">🎬</div><small>${T.media}</small><small style="opacity:.7">${T.mediaHint}</small></div>`;
     const qrows = d.q.map(q=>`<div class="qrow"><div class="qtxt">${q}</div><button class="qspeak" onclick="speak('${q.replace(/'/g,"\\'")}','${lang}',this)">🔊</button></div>`).join('');
     const recV=(overrides[active]&&overrides[active].voices)||[];
-    const voices=(s.voices||[]).concat(recV);
+    const av=(overrides[active]&&overrides[active].activeVoice);
     const agentTxt=T2('agent'), sumTxt=T2('sum');
-    const voicesHtml = voices.length
-      ? voices.map((v,vi)=>`<div class="vitem"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><span class="vn">${v.n}</span><span class="vt">${v.t||''}</span></div>`).join('')
+    const voicesHtml = recV.length
+      ? recV.map((v,vi)=>`<div class="vitem ${av===vi?'sel':''}"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><span class="vn">${v.n}${av===vi?' · ✓ ta gra':''}</span><span class="vt">${v.t||''}</span><button class="vpick" title="Wybierz tę głosówkę" onclick="pickVoice(${vi})">${av===vi?'★':'☆'}</button><button class="vdel" title="Usuń" onclick="delVoice(${vi})">🗑</button></div>`).join('')
       : `<div class="vempty">${T.voicesEmpty}</div>`;
     document.getElementById('stageBody').innerHTML=`
       <div class="mhead"><div class="mtitle"><svg class="lot"><use href="#lotus"/></svg> ${T.etap} ${active+1}/${N}</div><div class="mclose" onclick="closeStage()">${T.close}</div></div>
