@@ -102,6 +102,17 @@
   .st-foot{display:flex;gap:9px;margin-top:6px}
   .st-foot .go{flex:1;border:none;cursor:pointer;color:#fff;font-weight:800;font-size:13.5px;height:46px;border-radius:24px;background:linear-gradient(120deg,var(--sky-d),var(--mint-d));box-shadow:0 9px 20px rgba(95,150,189,.42)}
   .st-foot .ask{border:1px solid var(--rose-soft);background:#fff;color:var(--rose-d);font-weight:800;font-size:13px;padding:0 16px;height:46px;border-radius:24px;cursor:pointer}
+  .st-sec.docs .ic{background:#f2ecdc} .st-sec.docs .lab{color:var(--gold-d)}
+  .st-sec.voices .ic{background:var(--rose-soft)} .st-sec.voices .lab{color:var(--rose-d)}
+  .docgrid{display:flex;gap:8px;flex-wrap:wrap}
+  .docbtn{border:1px solid #e6dccb;background:#fffdf7;color:#7a6636;font-weight:700;font-size:12.5px;padding:9px 14px;border-radius:16px;cursor:pointer;transition:.15s}
+  .docbtn:hover{background:#fbf3e0;transform:translateY(-1px)}
+  .vitem{display:flex;align-items:center;gap:10px;background:#fdf4f7;border:1px solid var(--rose-soft);border-radius:14px;padding:8px 11px;margin-bottom:7px}
+  .vitem:last-child{margin-bottom:0}
+  .vplay{border:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:50%;color:#fff;font-size:13px;background:var(--rose-d);box-shadow:0 5px 12px rgba(211,128,155,.35)}
+  .vitem .vn{flex:1;font-size:12.5px;font-weight:600}
+  .vitem .vt{font-size:11px;color:var(--muted)}
+  .vempty{font-size:12px;color:var(--muted);font-style:italic}
   /* translator */
   .live-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#fff;background:var(--rose-d);padding:4px 12px;border-radius:20px}
   .live-badge i{width:8px;height:8px;border-radius:50%;background:#fff;animation:pulse 1.1s infinite}
@@ -226,14 +237,14 @@
   const N=STAGES.length, STEP=360/N;
   const SEC=[["agent","💬","agent"],["maliwan","🖐️","maliwan"],["kursanci","🧑‍🎓","kursanci"],["uwaga","⚠️","uwaga"],["sum","🌸","sum"]];
   const L={
-    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
+    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",wordBtn:"Notatki (Word)",docsHead:"Materiały",voicesHead:"Głosówki",voicesEmpty:"Miejsce na głosówki — dodamy nagrania z bazy.",docSoon:"📎 Dokument dodamy z bazy — zostaw link w Excelu",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
       leg:["zrobione","teraz","przed nami","wybrany"],note:"Klikaj etapy na kole (ożywają), a w panelu ▶ agent <b>czyta na głos</b>. Na dole: 🪷 tłumacz i 🎙️ nagrania.",
       sec:{agent:"Agent mówi",maliwan:"Maliwan pokazuje",kursanci:"Kursanci robią",uwaga:"Na co uważać",sum:"Podsumowanie"},
       media:"Film / zdjęcie instruktażowe",mediaHint:"(miejsce na materiał — dodamy z bazy)",listen:"▶ Posłuchaj",stop:"■ Stop",qhead:"Pytania kursantów",
       trTitle:"Tłumacz na żywo",trKb:"📚 baza wiedzy: Thai Maliwan Academy",micB:"Agent słucha…",micD:"Maliwan lub kursant mówi w swoim języku — agent tłumaczy i odpowiada.",
       inLabel:"Pytanie po:",sim:"🎤 Symuluj pytanie Maliwan",close:"Zamknij ✕",who:"🖐️ Maliwan pyta",arrow:"▾ agent odpowiada z bazy wiedzy ▾",ansToast:"🪷 Agent odpowiedział w 4 językach",
       recTitle:"Nagrania sesji",recSub:"Wejścia głosowe agenta z dzisiejszego dnia — odtwórz, przewiń, udostępnij.",recMeta:"głos agenta",langToast:"Język: Polski",speakToast:"🔊 Agent czyta na głos…"},
-    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
+    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",wordBtn:"บันทึก (Word)",docsHead:"สื่อและเอกสาร",voicesHead:"เสียงบันทึก",voicesEmpty:"พื้นที่สำหรับเสียงบันทึก — จะเพิ่มจากฐานข้อมูล",docSoon:"📎 จะเพิ่มเอกสารจากฐานข้อมูล",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
       leg:["เสร็จแล้ว","ตอนนี้","ถัดไป","ที่เลือก"],note:"แตะขั้นตอนบนวงล้อ แล้วในแผงกด ▶ เอเจนต์จะ<b>อ่านออกเสียง</b> ด้านล่าง: 🪷 ล่าม และ 🎙️ บันทึก",
       sec:{agent:"เอเจนต์พูด",maliwan:"มะลิวัลย์สาธิต",kursanci:"ผู้เรียนฝึก",uwaga:"ข้อควรระวัง",sum:"สรุป"},
       media:"วิดีโอ / ภาพประกอบ",mediaHint:"(พื้นที่สำหรับสื่อ — จะเพิ่มจากฐานข้อมูล)",listen:"▶ ฟัง",stop:"■ หยุด",qhead:"คำถามผู้เรียน",
@@ -292,11 +303,16 @@
     const media = s.video ? `<div class="st-media"><iframe src="${s.video}" allowfullscreen></iframe></div>`
       : `<div class="st-media"><div class="pl">🎬</div><small>${T.media}</small><small style="opacity:.7">${T.mediaHint}</small></div>`;
     const qrows = d.q.map(q=>`<div class="qrow"><div class="qtxt">${q}</div><button class="qspeak" onclick="speak('${q.replace(/'/g,"\\'")}','${lang}',this)">🔊</button></div>`).join('');
+    const voices=(s.voices||[]);
+    const voicesHtml = voices.length
+      ? voices.map((v,vi)=>`<div class="vitem"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><span class="vn">${v.n}</span><span class="vt">${v.t||''}</span></div>`).join('')
+      : `<div class="vempty">${T.voicesEmpty}</div>`;
     document.getElementById('stageBody').innerHTML=`
       <div class="mhead"><div class="mtitle"><svg class="lot"><use href="#lotus"/></svg> ${T.etap} ${active+1}/${N}</div><div class="mclose" onclick="closeStage()">${T.close}</div></div>
       <div class="st-medallion"><div class="st-badge">${s.i}</div><div class="st-time">${s.t} · ${s.dur}</div><div class="st-name">${d.n}</div><div class="st-goal">🎯 ${d.cel}</div></div>
       ${media}
-      <div style="text-align:center;margin:-4px 0 12px"><button class="ask" style="border-color:#e6dccb;color:var(--gold-d)" onclick="openPdf()">📄 ${T.pdfBtn}</button></div>
+      <div class="st-sec docs"><div class="lab"><span class="ic">📎</span> ${T.docsHead}</div><div class="docgrid"><button class="docbtn" onclick="openDoc('pdf')">📄 ${T.pdfBtn}</button><button class="docbtn" onclick="openDoc('word')">📝 ${T.wordBtn}</button></div></div>
+      <div class="st-sec voices"><div class="lab"><span class="ic">🎧</span> ${T.voicesHead}</div>${voicesHtml}</div>
       <div class="st-sec agent"><div class="lab"><span class="ic">💬</span> ${T.sec.agent}</div><p>„${d.agent}”</p><button class="speak" data-label="${T.listen}" onclick="speakSel('agent',this)">${T.listen}</button></div>
       <div class="st-sec"><div class="lab"><span class="ic">🖐️</span> ${T.sec.maliwan}</div><p>${d.maliwan}</p></div>
       <div class="st-sec"><div class="lab"><span class="ic">🧑‍🎓</span> ${T.sec.kursanci}</div><p>${d.kursanci}</p></div>
@@ -307,6 +323,12 @@
   function closeStage(){speechSynthesis.cancel();document.getElementById('stageModal').classList.remove('open');document.getElementById('scrim').classList.remove('open');}
   window.closeStage=closeStage;
   window.openPdf=()=>{const p=STAGES[active].pdf;if(p)window.open(p,'_blank');else toast(L[lang].pdfSoon);};
+  window.openDoc=(field)=>{const p=STAGES[active][field];if(p)window.open(p,'_blank');else toast(field==='pdf'?L[lang].pdfSoon:L[lang].docSoon);};
+  let __audio=null;
+  window.playAudio=(url,btn)=>{if(!url){toast(L[lang].voicesEmpty);return;}
+    if(__audio){__audio.pause();document.querySelectorAll('.vplay').forEach(b=>b.textContent='▶');}
+    if(btn&&btn.textContent==='⏸'){btn.textContent='▶';__audio=null;return;}
+    __audio=new Audio(url);__audio.play();if(btn){btn.textContent='⏸';__audio.onended=()=>btn.textContent='▶';}toast('🔊 '+L[lang].voicesHead);};
 
   function nextStep(fromPanel){if(active<N-1){active++;spinTo(active,true);renderCore();if(fromPanel||document.getElementById('stageModal').classList.contains('open')){renderStage();document.getElementById('stageModal').classList.add('open');document.getElementById('scrim').classList.add('open');}toast('✅ → '+STAGES[active].t+' '+STAGES[active][lang].n);}else toast(L[lang].lastStep);}
   window.nextStep=nextStep;
