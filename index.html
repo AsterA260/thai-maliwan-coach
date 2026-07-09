@@ -20,7 +20,16 @@
   .orb.a{width:280px;height:280px;background:var(--sky-soft);top:-40px;left:-60px}
   .orb.b{width:320px;height:320px;background:var(--rose-soft);bottom:-80px;right:-70px}
   .orb.c{width:240px;height:240px;background:var(--mint-soft);top:44%;left:-90px}
-  .topbar{width:100%;max-width:660px;display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px;position:relative;z-index:5}
+  .topbar{width:100%;max-width:660px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;position:relative;z-index:5;gap:8px;flex-wrap:wrap}
+  .editbar{display:flex;gap:8px}
+  .editToggle{border:1px solid var(--mint);background:rgba(255,255,255,.82);color:var(--mint-d);font-weight:800;font-size:12.5px;padding:8px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(8px)}
+  .editToggle.on{background:linear-gradient(120deg,var(--mint-d),var(--sky-d));color:#fff;border-color:transparent}
+  .editToggle.exp{border-color:var(--gold);color:var(--gold-d)}
+  .ed{width:100%;min-height:74px;border:1.5px solid var(--mint);border-radius:14px;padding:10px 12px;font-family:inherit;font-size:13.5px;color:#333;resize:vertical;background:#fbfffc;line-height:1.5}
+  .ed:focus{outline:2px solid var(--mint-d)}
+  .edrow{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .recbtn{border:1.5px solid var(--rose);cursor:pointer;background:#fff;color:var(--rose-d);font-weight:700;font-size:12.5px;padding:8px 14px;border-radius:22px}
+  .recbtn.rec{background:var(--rose-d);color:#fff;border-color:transparent;animation:pulse 1s infinite}
   .langswitch{display:flex;gap:4px;background:rgba(255,255,255,.8);border:1px solid var(--gold-l);border-radius:30px;padding:4px;backdrop-filter:blur(8px)}
   .langswitch button{border:none;background:none;cursor:pointer;font-size:12.5px;font-weight:800;color:var(--muted);padding:6px 14px;border-radius:24px;transition:.15s}
   .langswitch button.on{background:linear-gradient(120deg,var(--sky-d),var(--rose-d));color:#fff}
@@ -172,6 +181,10 @@
   <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 
   <div class="topbar">
+    <div class="editbar">
+      <button id="edBtn" class="editToggle" onclick="toggleEdit()">✏️ Tworzenie</button>
+      <button id="expBtn" class="editToggle exp" style="display:none" onclick="exportContent()">💾 Eksport</button>
+    </div>
     <div class="langswitch">
       <button id="lPL" onclick="setLang('PL')" class="on">🇵🇱 Polski</button>
       <button id="lTH" onclick="setLang('TH')">🇹🇭 ไทย</button>
@@ -237,14 +250,14 @@
   const N=STAGES.length, STEP=360/N;
   const SEC=[["agent","💬","agent"],["maliwan","🖐️","maliwan"],["kursanci","🧑‍🎓","kursanci"],["uwaga","⚠️","uwaga"],["sum","🌸","sum"]];
   const L={
-    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",wordBtn:"Notatki (Word)",docsHead:"Materiały",voicesHead:"Głosówki",voicesEmpty:"Miejsce na głosówki — dodamy nagrania z bazy.",docSoon:"📎 Dokument dodamy z bazy — zostaw link w Excelu",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
+    PL:{tag:"Kliknij etap albo środek koła — otworzy się procedura. 🪷",live:"Tłumacz na żywo",rec:"Nagrania sesji",etap:"etap",next:"dalej →",openProc:"▸ Otwórz procedurę",pdfBtn:"Procedura (PDF)",wordBtn:"Notatki (Word)",docsHead:"Materiały",voicesHead:"Głosówki",voicesEmpty:"Miejsce na głosówki — włącz tryb ✏️ Tworzenie i nagraj.",recBtn:"Nagraj głosówkę",recStop:"Zatrzymaj",docSoon:"📎 Dokument dodamy z bazy — zostaw link w Excelu",pdfSoon:"📄 PDF dodamy z bazy — zostaw link w Excelu",lastStep:"🌟 To ostatni etap dnia",
       leg:["zrobione","teraz","przed nami","wybrany"],note:"Klikaj etapy na kole (ożywają), a w panelu ▶ agent <b>czyta na głos</b>. Na dole: 🪷 tłumacz i 🎙️ nagrania.",
       sec:{agent:"Agent mówi",maliwan:"Maliwan pokazuje",kursanci:"Kursanci robią",uwaga:"Na co uważać",sum:"Podsumowanie"},
       media:"Film / zdjęcie instruktażowe",mediaHint:"(miejsce na materiał — dodamy z bazy)",listen:"▶ Posłuchaj",stop:"■ Stop",qhead:"Pytania kursantów",
       trTitle:"Tłumacz na żywo",trKb:"📚 baza wiedzy: Thai Maliwan Academy",micB:"Agent słucha…",micD:"Maliwan lub kursant mówi w swoim języku — agent tłumaczy i odpowiada.",
       inLabel:"Pytanie po:",sim:"🎤 Symuluj pytanie Maliwan",close:"Zamknij ✕",who:"🖐️ Maliwan pyta",arrow:"▾ agent odpowiada z bazy wiedzy ▾",ansToast:"🪷 Agent odpowiedział w 4 językach",
       recTitle:"Nagrania sesji",recSub:"Wejścia głosowe agenta z dzisiejszego dnia — odtwórz, przewiń, udostępnij.",recMeta:"głos agenta",langToast:"Język: Polski",speakToast:"🔊 Agent czyta na głos…"},
-    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",wordBtn:"บันทึก (Word)",docsHead:"สื่อและเอกสาร",voicesHead:"เสียงบันทึก",voicesEmpty:"พื้นที่สำหรับเสียงบันทึก — จะเพิ่มจากฐานข้อมูล",docSoon:"📎 จะเพิ่มเอกสารจากฐานข้อมูล",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
+    TH:{tag:"แตะขั้นตอนหรือกลางวงล้อ — จะเปิดขั้นตอนการทำงาน 🪷",live:"ล่ามแปลสด",rec:"บันทึกเซสชัน",etap:"ขั้นที่",next:"ต่อไป →",openProc:"▸ เปิดขั้นตอน",pdfBtn:"เอกสารขั้นตอน (PDF)",wordBtn:"บันทึก (Word)",docsHead:"สื่อและเอกสาร",voicesHead:"เสียงบันทึก",voicesEmpty:"พื้นที่เสียงบันทึก — เปิดโหมด ✏️ Tworzenie แล้วบันทึก",recBtn:"บันทึกเสียง",recStop:"หยุด",docSoon:"📎 จะเพิ่มเอกสารจากฐานข้อมูล",pdfSoon:"📄 จะเพิ่ม PDF จากฐานข้อมูล",lastStep:"🌟 ขั้นสุดท้ายของวันแล้ว",
       leg:["เสร็จแล้ว","ตอนนี้","ถัดไป","ที่เลือก"],note:"แตะขั้นตอนบนวงล้อ แล้วในแผงกด ▶ เอเจนต์จะ<b>อ่านออกเสียง</b> ด้านล่าง: 🪷 ล่าม และ 🎙️ บันทึก",
       sec:{agent:"เอเจนต์พูด",maliwan:"มะลิวัลย์สาธิต",kursanci:"ผู้เรียนฝึก",uwaga:"ข้อควรระวัง",sum:"สรุป"},
       media:"วิดีโอ / ภาพประกอบ",mediaHint:"(พื้นที่สำหรับสื่อ — จะเพิ่มจากฐานข้อมูล)",listen:"▶ ฟัง",stop:"■ หยุด",qhead:"คำถามผู้เรียน",
@@ -277,8 +290,25 @@
       u.onend=()=>{btn.classList.remove('stop');btn.textContent=btn.dataset.label;speakingBtn=null;};}
     speechSynthesis.speak(u); toast(L[lang].speakToast);
   }
-  window.speakSel=(field,btn)=>{const s=STAGES[active][lang]; speak(s[field],lang,btn);};
+  window.speakSel=(field,btn)=>{speak(T2(field),lang,btn);};
   if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>{};}
+
+  /* ---- studio treści: edycja + nagrywanie (zapis w przeglądarce) ---- */
+  let overrides={}; try{overrides=JSON.parse(localStorage.getItem('coach_ov')||'{}');}catch(e){overrides={};}
+  let editMode=false, mediaRec=null, recChunks=[];
+  function saveOverrides(){try{localStorage.setItem('coach_ov',JSON.stringify(overrides));}catch(e){toast('Pamięć pełna — użyj 💾 Eksport');}}
+  function T2(field){const o=overrides[active]&&overrides[active][lang]&&overrides[active][lang][field];return (o!==undefined&&o!=='')?o:STAGES[active][lang][field];}
+  window.setTxt=(field,val)=>{overrides[active]=overrides[active]||{};overrides[active][lang]=overrides[active][lang]||{};overrides[active][lang][field]=val;saveOverrides();};
+  window.toggleEdit=()=>{editMode=!editMode;const b=document.getElementById('edBtn');b.classList.toggle('on',editMode);b.textContent=editMode?'👁️ Podgląd':'✏️ Tworzenie';document.getElementById('expBtn').style.display=editMode?'':'none';if(document.getElementById('stageModal').classList.contains('open'))renderStage();toast(editMode?'✏️ Tryb tworzenia — pisz lub nagrywaj':'👁️ Podgląd');};
+  window.exportContent=()=>{const blob=new Blob([JSON.stringify(overrides,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='coach_tresc_maliwan.json';document.body.appendChild(a);a.click();a.remove();toast('💾 Zapisano plik z treścią');};
+  window.toggleRec=async(field,btn)=>{
+    if(mediaRec&&mediaRec.state==='recording'){mediaRec.stop();return;}
+    try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRec=new MediaRecorder(stream);recChunks=[];
+      mediaRec.ondataavailable=e=>recChunks.push(e.data);
+      mediaRec.onstop=()=>{const blob=new Blob(recChunks,{type:'audio/webm'});const fr=new FileReader();fr.onloadend=()=>{overrides[active]=overrides[active]||{};overrides[active].voices=overrides[active].voices||[];overrides[active].voices.push({n:(field==='agent'?L[lang].sec.agent:L[lang].sec.sum),t:new Date().toLocaleTimeString().slice(0,5),url:fr.result});saveOverrides();renderStage();toast('🎧 Głosówka zapisana');};fr.readAsDataURL(blob);stream.getTracks().forEach(t=>t.stop());};
+      mediaRec.start();btn.classList.add('rec');btn.textContent='■ '+L[lang].recStop;toast('🔴 Nagrywam… kliknij, by zatrzymać');
+    }catch(e){toast('Brak dostępu do mikrofonu');}
+  };
 
   STAGES.forEach((s,idx)=>{const base=-90+idx*STEP,ang=base*Math.PI/180;const x=C+R*Math.cos(ang),y=C+R*Math.sin(ang);
     const b=document.createElement('div');b.className='node '+s.st;b.style.left=x+'px';b.style.top=y+'px';
@@ -303,7 +333,9 @@
     const media = s.video ? `<div class="st-media"><iframe src="${s.video}" allowfullscreen></iframe></div>`
       : `<div class="st-media"><div class="pl">🎬</div><small>${T.media}</small><small style="opacity:.7">${T.mediaHint}</small></div>`;
     const qrows = d.q.map(q=>`<div class="qrow"><div class="qtxt">${q}</div><button class="qspeak" onclick="speak('${q.replace(/'/g,"\\'")}','${lang}',this)">🔊</button></div>`).join('');
-    const voices=(s.voices||[]);
+    const recV=(overrides[active]&&overrides[active].voices)||[];
+    const voices=(s.voices||[]).concat(recV);
+    const agentTxt=T2('agent'), sumTxt=T2('sum');
     const voicesHtml = voices.length
       ? voices.map((v,vi)=>`<div class="vitem"><button class="vplay" onclick="playAudio('${v.url}',this)">▶</button><span class="vn">${v.n}</span><span class="vt">${v.t||''}</span></div>`).join('')
       : `<div class="vempty">${T.voicesEmpty}</div>`;
@@ -313,12 +345,12 @@
       ${media}
       <div class="st-sec docs"><div class="lab"><span class="ic">📎</span> ${T.docsHead}</div><div class="docgrid"><button class="docbtn" onclick="openDoc('pdf')">📄 ${T.pdfBtn}</button><button class="docbtn" onclick="openDoc('word')">📝 ${T.wordBtn}</button></div></div>
       <div class="st-sec voices"><div class="lab"><span class="ic">🎧</span> ${T.voicesHead}</div>${voicesHtml}</div>
-      <div class="st-sec agent"><div class="lab"><span class="ic">💬</span> ${T.sec.agent}</div><p>„${d.agent}”</p><button class="speak" data-label="${T.listen}" onclick="speakSel('agent',this)">${T.listen}</button></div>
+      <div class="st-sec agent"><div class="lab"><span class="ic">💬</span> ${T.sec.agent}</div>${editMode?`<textarea class="ed" oninput="setTxt('agent',this.value)">${agentTxt}</textarea><div class="edrow"><button class="speak" data-label="${T.listen}" onclick="speakSel('agent',this)">${T.listen}</button><button class="recbtn" onclick="toggleRec('agent',this)">🎙️ ${T.recBtn}</button></div>`:`<p>„${agentTxt}”</p><button class="speak" data-label="${T.listen}" onclick="speakSel('agent',this)">${T.listen}</button>`}</div>
       <div class="st-sec"><div class="lab"><span class="ic">🖐️</span> ${T.sec.maliwan}</div><p>${d.maliwan}</p></div>
       <div class="st-sec"><div class="lab"><span class="ic">🧑‍🎓</span> ${T.sec.kursanci}</div><p>${d.kursanci}</p></div>
       <div class="st-sec warn"><div class="lab"><span class="ic">⚠️</span> ${T.sec.uwaga}</div><p>${d.uwaga}</p></div>
       <div class="st-sec"><div class="lab"><span class="ic">❓</span> ${T.qhead}</div><div class="qlist">${qrows}</div></div>
-      <div class="st-sec sum"><div class="lab"><span class="ic">🌸</span> ${T.sec.sum}</div><p>${d.sum}</p><button class="speak" data-label="${T.listen}" onclick="speakSel('sum',this)">${T.listen}</button></div>
+      <div class="st-sec sum"><div class="lab"><span class="ic">🌸</span> ${T.sec.sum}</div>${editMode?`<textarea class="ed" oninput="setTxt('sum',this.value)">${sumTxt}</textarea><div class="edrow"><button class="speak" data-label="${T.listen}" onclick="speakSel('sum',this)">${T.listen}</button><button class="recbtn" onclick="toggleRec('sum',this)">🎙️ ${T.recBtn}</button></div>`:`<p>${sumTxt}</p><button class="speak" data-label="${T.listen}" onclick="speakSel('sum',this)">${T.listen}</button>`}</div>
       <div class="st-foot"><button class="ask" onclick="openTr()">🪷</button><button class="go" onclick="nextStep(true)">${T.next}</button></div>`;}
   function closeStage(){speechSynthesis.cancel();document.getElementById('stageModal').classList.remove('open');document.getElementById('scrim').classList.remove('open');}
   window.closeStage=closeStage;
