@@ -8,13 +8,14 @@
 <style>
 body{display:flex;flex-direction:column;min-height:100vh;overflow-x:hidden}
 
-/* ── pasek górny ── */
 header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;
   padding:12px 22px;border-bottom:1px solid var(--line2);background:var(--panel2);
   backdrop-filter:blur(26px) saturate(1.3)}
 header nav{display:flex;gap:3px;flex:1;flex-wrap:wrap}
 header nav button{padding:7px 14px;border-radius:10px;color:var(--mut);font-size:13px}
 header nav button.wybrany{color:var(--gold);background:var(--goldsoft)}
+header nav .licznik{display:inline-block;min-width:17px;padding:0 5px;margin-left:6px;
+  border-radius:9px;background:var(--gold);color:var(--bg);font-size:10px;font-weight:700}
 .kto{display:flex;align-items:center;gap:10px;flex:none}
 .kto .imie{font-size:13px;color:var(--dim)}
 
@@ -27,36 +28,30 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 .widok.aktywny{display:flex}
 .blok{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
 .rzad{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.siatka{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.siatka{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
 
-/* ── kafle kursów ── */
-.kurs{padding:18px 20px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:.15s}
-.kurs:hover{border-color:var(--line)}
-.kurs h3{font-family:var(--serif);font-size:19px;font-weight:500;line-height:1.25}
-.kurs .fakty{display:flex;gap:8px;flex-wrap:wrap}
-
-/* ── ORBITA (laptop i tablet) ── */
-.orbita{position:relative;width:min(560px,86vw);aspect-ratio:1;margin:8px auto 0}
-.pierscien{position:absolute;inset:3%;border-radius:50%;border:1px solid var(--line2)}
-.pierscien.wewn{inset:29%}
-.kafel{position:absolute;width:20%;aspect-ratio:3/4;transform:translate(-50%,-50%);
-  border-radius:44px 44px 12px 12px;border:1px solid var(--line2);background:var(--bg2);
+/* ── ORBITA — powiększona ── */
+.orbita{position:relative;width:min(700px,92vw);aspect-ratio:1;margin:14px auto 0}
+.pierscien{position:absolute;inset:2%;border-radius:50%;border:1px solid var(--line2)}
+.pierscien.wewn{inset:30%}
+.kafel{position:absolute;width:22.5%;aspect-ratio:3/3.9;transform:translate(-50%,-50%);
+  border-radius:52px 52px 14px 14px;border:1px solid var(--line2);background:var(--bg2);
   cursor:pointer;overflow:hidden;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:5px;padding:8px;text-align:center;transition:.2s}
-.kafel:hover{border-color:var(--line)}
-.kafel.teraz{border-color:var(--gold);transform:translate(-50%,-50%) scale(1.09);z-index:5;
-  box-shadow:0 0 0 1px var(--gold),0 18px 44px rgba(0,0,0,.45)}
+  align-items:center;justify-content:center;gap:7px;padding:11px 9px;text-align:center;transition:.2s}
+.kafel:hover{border-color:var(--line);background:#372D22}
+.kafel.teraz{border-color:var(--gold);transform:translate(-50%,-50%) scale(1.1);z-index:5;
+  box-shadow:0 0 0 1px var(--gold),0 20px 48px rgba(0,0,0,.5)}
 .kafel.gotowy{border-color:var(--ok)}
-.kafel .ikonka{font-size:19px;line-height:1}
-.kafel .nr{font-size:8px;letter-spacing:1.6px;color:var(--mut)}
-.kafel .co{font-family:var(--serif);font-size:11px;line-height:1.2;color:var(--dim)}
+.kafel .ikonka{font-size:25px;line-height:1}
+.kafel .nr{font-size:9.5px;letter-spacing:1.8px;color:var(--mut)}
+.kafel .co{font-family:var(--serif);font-size:14px;line-height:1.22;color:var(--ink)}
 .medalion{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:38%;aspect-ratio:1;border-radius:50%;background:var(--panel2);
+  width:40%;aspect-ratio:1;border-radius:50%;background:var(--panel2);
   backdrop-filter:blur(14px);border:1px solid var(--line);display:grid;place-items:center;
   text-align:center;padding:7%;z-index:4}
-.medalion .nr{font-size:9px;letter-spacing:2.6px;color:var(--gold)}
-.medalion h2{font-family:var(--serif);font-size:16px;font-weight:500;margin:7px 0;line-height:1.2}
-.medalion p{font-size:11px;color:var(--mut);line-height:1.5}
+.medalion .nr{font-size:11px;letter-spacing:2.8px;color:var(--gold)}
+.medalion h2{font-family:var(--serif);font-size:20px;font-weight:500;margin:9px 0;line-height:1.2}
+.medalion p{font-size:12.5px;color:var(--dim);line-height:1.5}
 
 /* ── LISTA (telefon) ── */
 .lista{display:none;flex-direction:column;gap:9px}
@@ -75,8 +70,7 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
   .lista{display:flex}
   main{padding:18px 14px 70px}
   header{padding:10px 14px;gap:10px;flex-wrap:wrap}
-  header nav{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap;
-    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  header nav{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
   header nav::-webkit-scrollbar{display:none}
   header nav button{flex:none;white-space:nowrap}
   .kto{margin-left:auto}
@@ -84,12 +78,12 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 }
 
 /* ── panel etapu ── */
-.szuflada{position:fixed;inset:0;z-index:40;display:none;background:rgba(20,15,11,.72);
+.szuflada{position:fixed;inset:0;z-index:40;display:none;background:rgba(20,15,11,.74);
   backdrop-filter:blur(6px);padding:24px;overflow-y:auto}
 .szuflada.otwarta{display:block}
-.szuflada .tresc{width:min(680px,100%);margin:0 auto;padding:26px;display:flex;
+.szuflada .tresc{width:min(700px,100%);margin:0 auto;padding:26px;display:flex;
   flex-direction:column;gap:18px}
-.szuflada h2{font-family:var(--serif);font-size:24px;font-weight:500;line-height:1.2}
+.szuflada h2{font-family:var(--serif);font-size:25px;font-weight:500;line-height:1.2}
 .wiersz{display:flex;flex-direction:column;gap:5px}
 .wiersz .co{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
 .wiersz .tekst{color:var(--dim);font-size:14.5px}
@@ -98,7 +92,35 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 
 .pusto{padding:34px 20px;text-align:center;color:var(--mut);font-size:14px}
 .pasek{height:5px;border-radius:3px;background:rgba(224,188,119,.14);overflow:hidden;min-width:90px}
-.pasek i{display:block;height:100%;background:var(--ok);border-radius:3px}
+.pasek i{display:block;height:100%;background:var(--ok);border-radius:3px;transition:width .3s}
+
+/* ── stany: ładowanie, sukces, błąd ── */
+.wczytywanie{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:13.5px;
+  padding:26px;justify-content:center}
+.kreci{width:15px;height:15px;border:2px solid var(--line2);border-top-color:var(--gold);
+  border-radius:50%;animation:kreci .8s linear infinite;flex:none}
+@keyframes kreci{to{transform:rotate(360deg)}}
+.przycisk.pracuje{opacity:.6;pointer-events:none}
+#toasty{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;
+  gap:9px;max-width:min(380px,92vw)}
+.toast{padding:12px 15px;border-radius:11px;border:1px solid var(--line2);
+  background:var(--panel2);backdrop-filter:blur(18px);box-shadow:var(--cien);
+  font-size:13.5px;display:flex;gap:10px;align-items:flex-start;animation:wjedz .22s ease-out}
+@keyframes wjedz{from{opacity:0;transform:translateY(8px)}}
+.toast.ok{border-color:var(--ok);color:#D7EADD}
+.toast.zle{border-color:var(--zle);color:#F3CEC2}
+.toast .x{margin-left:auto;color:var(--mut);cursor:pointer;flex:none}
+
+.plikpole{display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:10px;
+  border:1px dashed var(--line2);color:var(--mut);cursor:pointer;font-size:13px}
+.plikpole:hover{border-color:var(--line);color:var(--gold)}
+.plikpole input{display:none}
+.mat{padding:15px 17px;display:flex;flex-direction:column;gap:9px}
+.mat b{font-weight:500;font-family:var(--serif);font-size:16px}
+.pyt{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.pyt .kto2{font-size:12px;color:var(--mut)}
+.pyt .tresc2{font-size:15px}
+.pyt .odp{border-left:2px solid var(--ok);padding-left:13px;color:var(--dim);font-size:14px}
 </style>
 </head>
 <body>
@@ -121,10 +143,10 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 </header>
 
 <main>
-  <!-- ══ SZKOLENIE ══ -->
   <section class="widok" id="w-szkolenie">
     <div class="tytul"><h1 id="tytulKursu">Szkolenie</h1><span class="cicho" id="podtytulKursu"></span></div>
     <div class="rzad" id="wyborKursu"></div>
+    <div id="etapyStan"></div>
     <div class="orbita" id="orbita"></div>
     <div class="lista" id="lista"></div>
     <div class="karta blok" id="materialyBlok">
@@ -133,17 +155,16 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
     </div>
   </section>
 
-  <!-- ══ KURSANCI (instruktor / admin) ══ -->
   <section class="widok" id="w-kursanci">
     <div class="tytul"><h1>Kursanci i postępy</h1></div>
     <div class="karta przewijak"><table id="tabKursanci"></table></div>
   </section>
 
-  <!-- ══ MATERIAŁY (instruktor / admin) ══ -->
   <section class="widok" id="w-materialy">
-    <div class="tytul"><h1>Materiały</h1><span class="cicho">Kursant zobaczy materiał dopiero po opublikowaniu</span></div>
+    <div class="tytul"><h1>Materiały</h1>
+      <span class="cicho">Kursant zobaczy materiał dopiero po opublikowaniu</span></div>
     <div class="karta blok">
-      <div class="etykieta">Dodaj materiał</div>
+      <div class="etykieta">Wgraj materiał</div>
       <div class="rzad">
         <select class="pole" id="mKurs" style="max-width:230px"></select>
         <select class="pole" id="mTyp" style="max-width:130px">
@@ -151,16 +172,21 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
           <option value="wideo">wideo</option><option value="audio">audio</option>
           <option value="inny">inny</option>
         </select>
-        <input class="pole" id="mNazwa" placeholder="Nazwa materiału" style="max-width:280px">
-        <button class="przycisk glowny" id="mDodaj">Dodaj</button>
+        <input class="pole" id="mNazwa" placeholder="Nazwa materiału" style="max-width:260px">
+        <label class="plikpole" id="mEtykieta">
+          <span id="mPlikNapis">Wybierz plik…</span>
+          <input type="file" id="mPlik">
+        </label>
+        <button class="przycisk glowny" id="mDodaj">Wgraj</button>
       </div>
-      <p class="cicho">Plik trafia do prywatnego magazynu pod kluczem <code>kurs/&lt;id&gt;/&lt;typ&gt;/…</code>.
-      Adresu nie da się zgadnąć ani otworzyć bez uprawnień.</p>
+      <p class="cicho">Plik trafia do prywatnego magazynu pod kluczem
+        <code>kurs/&lt;id&gt;/&lt;typ&gt;/…</code>. Adresu nie da się zgadnąć ani otworzyć
+        bez uprawnień. Limit 25 MB.</p>
     </div>
+    <div id="matStan"></div>
     <div class="karta przewijak"><table id="tabMaterialy"></table></div>
   </section>
 
-  <!-- ══ PYTANIA ══ -->
   <section class="widok" id="w-pytania">
     <div class="tytul"><h1>Pytania</h1></div>
     <div class="karta blok" id="zadajBlok">
@@ -168,22 +194,39 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
       <textarea class="pole" id="trescPytania" rows="3" placeholder="O co chcesz zapytać?"></textarea>
       <div class="rzad"><button class="przycisk glowny" id="wyslijPytanie">Wyślij pytanie</button></div>
     </div>
-    <div class="karta przewijak"><table id="tabPytania"></table></div>
+    <div id="pytStan"></div>
+    <div id="pytania" class="siatka"></div>
   </section>
 
-  <!-- ══ KONTA (admin) ══ -->
   <section class="widok" id="w-konta">
-    <div class="tytul"><h1>Konta i role</h1><span class="cicho">Rejestracja publiczna jest wyłączona</span></div>
+    <div class="tytul"><h1>Konta i role</h1>
+      <span class="cicho">Rejestracja publiczna jest wyłączona</span></div>
+    <div class="karta blok">
+      <div class="etykieta">Zaproś osobę</div>
+      <div class="rzad">
+        <input class="pole" id="zImie" placeholder="Imię" style="max-width:170px">
+        <input class="pole" id="zEmail" placeholder="adres@e-mail" type="email" style="max-width:250px">
+        <select class="pole" id="zRola" style="max-width:150px">
+          <option value="kursant">kursant</option>
+          <option value="instruktor">instruktor</option>
+          <option value="admin">administrator</option>
+        </select>
+        <button class="przycisk glowny" id="zWyslij">Wyślij zaproszenie</button>
+      </div>
+      <p class="cicho">Konto powstaje dopiero, gdy zaproszona osoba ustawi hasło.
+        Token zaproszenia trafia do bazy wyłącznie jako skrót — nie da się go odczytać.</p>
+      <div id="zWynik"></div>
+    </div>
+    <div id="kontaStan"></div>
     <div class="karta przewijak"><table id="tabKonta"></table></div>
   </section>
 
-  <!-- ══ PRZYPISANIA (admin) ══ -->
   <section class="widok" id="w-przypisania">
     <div class="tytul"><h1>Przypisania do kursów</h1></div>
     <div class="karta blok">
       <div class="rzad">
-        <select class="pole" id="pKursant" style="max-width:250px"></select>
-        <select class="pole" id="pKurs" style="max-width:250px"></select>
+        <select class="pole" id="pKursant" style="max-width:260px"></select>
+        <select class="pole" id="pKurs" style="max-width:260px"></select>
         <button class="przycisk glowny" id="pDodaj">Przypisz</button>
       </div>
     </div>
@@ -192,24 +235,50 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 </main>
 
 <div class="szuflada" id="szuflada"><div class="karta tresc" id="szufladaTresc"></div></div>
+<div id="toasty"></div>
 
 <script>
-const $  = id => document.getElementById(id);
+const $   = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const rozmiar = b => !b ? '' : b < 1024 ? b + ' B'
+  : b < 1048576 ? (b/1024).toFixed(0) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+
+/* ══ STANY: ładowanie / sukces / błąd ═════════════════════════════ */
+function powiadom(tekst, rodzaj='ok'){
+  const t = document.createElement('div');
+  t.className = 'toast ' + rodzaj;
+  t.innerHTML = `<span>${esc(tekst)}</span><span class="x">✕</span>`;
+  t.querySelector('.x').onclick = () => t.remove();
+  $('toasty').appendChild(t);
+  setTimeout(() => t.remove(), rodzaj === 'zle' ? 8000 : 4000);
+}
+function wczytuje(el, tekst='Wczytuję…'){
+  if (el) el.innerHTML = `<div class="karta wczytywanie"><span class="kreci"></span>${esc(tekst)}</div>`;
+}
+function pusto(el){ if (el) el.innerHTML = ''; }
+async function zPrzyciskiem(btn, napis, fn){
+  const stary = btn.textContent;
+  btn.classList.add('pracuje'); btn.textContent = napis;
+  try { return await fn(); }
+  finally { btn.classList.remove('pracuje'); btn.textContent = stary; }
+}
+
+/* ══ WARSTWA DANYCH ═══════════════════════════════════════════════
+   Na produkcji podmieniana na Supabase — patrz web/dane-supabase.js.  */
 const api = async (sciezka, dane) => {
   const o = dane ? { method:'POST', headers:{'Content-Type':'application/json'},
                      body: JSON.stringify(dane) } : {};
   const r = await fetch(sciezka, o);
   if (r.status === 401) { location.href = 'index.html'; throw new Error('sesja'); }
-  return r.json();
+  const d = await r.json().catch(() => ({ blad: 'Zła odpowiedź serwera.' }));
+  if (!r.ok) throw new Error(d.blad || 'Nie udało się wykonać operacji.');
+  return d;
 };
 
-let JA = null, KURSY = [], KURS = null, DANE = { lekcje:[], etapy:[], materialy:[], postepy:[] },
-    AKTYWNY = 0, KONTA = [];
+let JA = null, KURSY = [], KURS = null,
+    DANE = { lekcje:[], etapy:[], materialy:[], postepy:[] },
+    AKTYWNY = 0, KONTA = [], PYTANIA = [];
 
-/* ══ MENU ZALEŻNE OD ROLI ══════════════════════════════════════════
-   To jest wyłącznie wygoda. O tym, co użytkownik naprawdę zobaczy,
-   decydują polityki w bazie — ręczne wpisanie #konta niczego nie otwiera. */
 const ZAKLADKI = {
   admin      : [['szkolenie','Szkolenie'],['kursanci','Kursanci'],['materialy','Materiały'],
                 ['pytania','Pytania'],['konta','Konta'],['przypisania','Przypisania']],
@@ -218,38 +287,44 @@ const ZAKLADKI = {
   kursant    : [['szkolenie','Szkolenie'],['pytania','Pytania']],
 };
 
+/* Menu to wygoda. O tym, co użytkownik naprawdę zobaczy, decyduje RLS. */
 function pokaz(nazwa){
-  const wolno = ZAKLADKI[JA.rola].some(z => z[0] === nazwa);
-  if (!wolno) nazwa = 'szkolenie';
+  if (!ZAKLADKI[JA.rola].some(z => z[0] === nazwa)) nazwa = 'szkolenie';
   document.querySelectorAll('.widok').forEach(w => w.classList.remove('aktywny'));
   $('w-' + nazwa).classList.add('aktywny');
   document.querySelectorAll('#menu button').forEach(b =>
     b.classList.toggle('wybrany', b.dataset.w === nazwa));
   location.hash = nazwa;
-  if (nazwa === 'kursanci')    rysujKursantow();
-  if (nazwa === 'materialy')   rysujMaterialy();
-  if (nazwa === 'pytania')     rysujPytania();
-  if (nazwa === 'konta')       rysujKonta();
-  if (nazwa === 'przypisania') rysujPrzypisania();
+  ({ kursanci:rysujKursantow, materialy:rysujMaterialy, pytania:rysujPytania,
+     konta:rysujKonta, przypisania:rysujPrzypisania }[nazwa] || (()=>{}))();
 }
 
 /* ══ SZKOLENIE ═══════════════════════════════════════════════════ */
 function rysujWyborKursu(){
   $('wyborKursu').innerHTML = KURSY.map(k =>
     `<button class="przycisk ${k.id===KURS?.id?'glowny':'cichy'}" data-kurs="${k.id}">
-       ${esc(k.nazwa_pl)}</button>`).join('') || '';
+       ${esc(k.nazwa_pl)}</button>`).join('');
   $('wyborKursu').querySelectorAll('[data-kurs]').forEach(b =>
     b.onclick = () => wczytajKurs(KURSY.find(k => k.id === b.dataset.kurs)));
 }
 
 async function wczytajKurs(k){
   KURS = k; AKTYWNY = 0;
-  if (!k){ $('tytulKursu').textContent = 'Brak przypisanego szkolenia';
-           $('podtytulKursu').textContent = '';
-           $('orbita').innerHTML = ''; $('lista').innerHTML = '';
-           $('materialyBlok').style.display = 'none'; return; }
+  if (!k){
+    $('tytulKursu').textContent = 'Brak przypisanego szkolenia';
+    $('podtytulKursu').textContent = '';
+    $('orbita').innerHTML = ''; $('lista').innerHTML = '';
+    $('etapyStan').innerHTML = '<div class="karta pusto">Nie masz jeszcze przypisanego żadnego kursu. ' +
+      'Napisz do szkoły, jeśli to pomyłka.</div>';
+    $('materialyBlok').style.display = 'none'; return;
+  }
   $('materialyBlok').style.display = '';
-  DANE = await api('/api/kurs?id=' + k.id);
+  wczytuje($('etapyStan'), 'Wczytuję szkolenie…');
+  $('orbita').innerHTML = ''; $('lista').innerHTML = '';
+  try {
+    DANE = await api('/api/kurs?id=' + k.id);
+  } catch (e) { $('etapyStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
+  pusto($('etapyStan'));
   $('tytulKursu').textContent = k.nazwa_pl;
   $('podtytulKursu').textContent =
     `${k.dni} dni · ${k.godzin} godzin praktyki · ${DANE.etapy.length} etapów`;
@@ -260,27 +335,28 @@ const stanEtapu = id => (DANE.postepy.find(p => p.etap_id === id)?.status) || 'n
 
 function rysujEtapy(){
   const e = DANE.etapy, n = e.length;
-  if (!n){ $('orbita').innerHTML = '<div class="pusto">Ten kurs nie ma jeszcze opublikowanych etapów.</div>';
-           $('lista').innerHTML = ''; return; }
-
-  // ORBITA — laptop i tablet
-  const R = 38;
+  if (!n){
+    $('etapyStan').innerHTML =
+      '<div class="karta pusto">Ten kurs nie ma jeszcze opublikowanych etapów.</div>';
+    return;
+  }
+  const R = 38.5;
   $('orbita').innerHTML = '<div class="pierscien"></div><div class="pierscien wewn"></div>' +
     e.map((x,i) => {
       const a = (-90 + i*360/n) * Math.PI/180;
       const gotowy = stanEtapu(x.id) === 'zrobione';
       return `<button class="kafel ${i===AKTYWNY?'teraz':''} ${gotowy?'gotowy':''}"
-        style="left:${50+R*Math.cos(a)}%;top:${50+R*Math.sin(a)}%" data-i="${i}">
+        style="left:${50+R*Math.cos(a)}%;top:${50+R*Math.sin(a)}%" data-i="${i}"
+        title="${esc(x.nazwa_pl)}">
         <span class="ikonka">${esc(x.ikona||'•')}</span>
-        <span class="nr">${String(i+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</span>
+        <span class="nr">${String(i+1).padStart(2,'0')} · ${esc(x.godzina||'')}</span>
         <span class="co">${esc(x.nazwa_pl)}</span></button>`;
     }).join('') +
     (() => { const x = e[AKTYWNY]; return `<div class="medalion">
-      <div><div class="nr">${esc(x.godzina||'')}</div>
+      <div><div class="nr">${String(AKTYWNY+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</div>
       <h2>${esc(x.nazwa_pl)}</h2>
-      <p>${esc((x.cel_pl||'').slice(0,90))}</p></div></div>`; })();
+      <p>${esc((x.cel_pl||'').slice(0,110))}</p></div></div>`; })();
 
-  // LISTA — telefon
   $('lista').innerHTML = e.map((x,i) => {
     const gotowy = stanEtapu(x.id) === 'zrobione';
     return `<button class="pozycja ${i===AKTYWNY?'teraz':''} ${gotowy?'gotowy':''}" data-i="${i}">
@@ -303,6 +379,8 @@ function otworzEtap(x){
   const pyt = (x.pytania||[]).length
     ? `<div class="wiersz"><span class="co">Pytania kontrolne</span><ul class="tekst"
        style="padding-left:18px">${x.pytania.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>` : '';
+  const mat = DANE.materialy.filter(m => m.etap_id === x.id &&
+                                    (JA.rola !== 'kursant' || m.opublikowany));
   $('szufladaTresc').innerHTML = `
     <div class="rzad" style="justify-content:space-between">
       <span class="plakietka">${esc(x.godzina||'')} · ${x.czas_min||'–'} min</span>
@@ -315,6 +393,9 @@ function otworzEtap(x){
     ${w('Na co uważać', x.uwaga_pl, 'ostrzezenie')}
     ${w('Podsumowanie', x.podsumowanie_pl)}
     ${pyt}
+    ${mat.length ? `<div class="wiersz"><span class="co">Materiały do tego etapu</span>
+      <div class="rzad">${mat.map(m => `<button class="przycisk cichy" data-otworz="${m.id}">
+        ${esc(m.nazwa_pl)}</button>`).join('')}</div></div>` : ''}
     <div class="rzad">
       ${JA.rola === 'kursant'
         ? `<button class="przycisk ${gotowy?'cichy':'glowny'}" id="oznacz">
@@ -322,100 +403,232 @@ function otworzEtap(x){
     </div>`;
   $('szuflada').classList.add('otwarta');
   $('zamknij').onclick = () => $('szuflada').classList.remove('otwarta');
+  podepnijOtwieranie($('szufladaTresc'));
   const o = $('oznacz');
-  if (o) o.onclick = async () => {
-    const nowy = gotowy ? 'w_trakcie' : 'zrobione';
-    const p = await api('/api/postep', { etap_id: x.id, status: nowy });
-    DANE.postepy = DANE.postepy.filter(q => q.etap_id !== x.id).concat(p ? [p] : []);
-    rysujEtapy(); otworzEtap(x);
-  };
+  if (o) o.onclick = () => zPrzyciskiem(o, 'Zapisuję…', async () => {
+    try {
+      const p = await api('/api/postep', { etap_id: x.id, status: gotowy ? 'w_trakcie' : 'zrobione' });
+      DANE.postepy = DANE.postepy.filter(q => q.etap_id !== x.id).concat(p ? [p] : []);
+      powiadom(gotowy ? 'Cofnięto oznaczenie.' : 'Etap oznaczony jako zrobiony.');
+      rysujEtapy(); otworzEtap(x);
+    } catch (e) { powiadom(e.message, 'zle'); }
+  });
 }
 $('szuflada').addEventListener('click', e => {
   if (e.target === $('szuflada')) $('szuflada').classList.remove('otwarta'); });
 
+/* ── otwieranie pliku przez podpisany link ── */
+function podepnijOtwieranie(zakres){
+  zakres.querySelectorAll('[data-otworz]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, 'Przygotowuję…', async () => {
+      try {
+        const d = await api('/api/material/link?id=' + b.dataset.otworz);
+        window.open(d.link, '_blank', 'noopener');
+        powiadom('Link ważny przez 5 minut.');
+      } catch (e) { powiadom(e.message, 'zle'); }
+    }));
+}
+
 function rysujMaterialyKursanta(){
   const m = DANE.materialy.filter(x => JA.rola === 'kursant' ? x.opublikowany : true);
   $('materialy').innerHTML = m.length
-    ? `<div class="siatka">${m.map(x => `<div class="karta blok" style="gap:8px">
+    ? `<div class="siatka">${m.map(x => `<div class="karta mat">
          <div class="rzad"><span class="plakietka">${esc(x.typ)}</span>
-         ${x.opublikowany ? '' : '<span class="plakietka ukryty">nieopublikowany</span>'}</div>
-         <b style="font-weight:500">${esc(x.nazwa_pl)}</b>
-         <span class="cicho">${esc(x.opis||'')}</span></div>`).join('')}</div>`
+         ${x.opublikowany ? '' : '<span class="plakietka ukryty">nieopublikowany</span>'}
+         ${x.rozmiar_b ? `<span class="cicho">${rozmiar(Number(x.rozmiar_b))}</span>` : ''}</div>
+         <b>${esc(x.nazwa_pl)}</b>
+         ${x.opis ? `<span class="cicho">${esc(x.opis)}</span>` : ''}
+         <div class="rzad"><button class="przycisk cichy" data-otworz="${x.id}">
+           Otwórz / pobierz</button></div></div>`).join('')}</div>`
     : '<div class="pusto">Do tego kursu nie ma jeszcze materiałów.</div>';
+  podepnijOtwieranie($('materialy'));
 }
 
 /* ══ KURSANCI ════════════════════════════════════════════════════ */
 async function rysujKursantow(){
-  const k = await api('/api/kursanci');
-  $('tabKursanci').innerHTML = k.length ? `
-    <tr><th>Kursant</th><th>E-mail</th><th>Kurs</th><th>Postęp</th></tr>` +
-    k.map(x => { const proc = x.etapow ? Math.round(100*x.zrobione/x.etapow) : 0;
-      return `<tr><td>${esc(x.imie)}</td><td class="cicho">${esc(x.email)}</td>
-      <td>${esc(x.kurs)}</td>
-      <td><div class="rzad"><div class="pasek"><i style="width:${proc}%"></i></div>
-      <span class="cicho">${x.zrobione} / ${x.etapow}</span></div></td></tr>`; }).join('')
-    : '<tr><td class="pusto">Nie masz jeszcze przypisanych kursantów.</td></tr>';
+  const el = $('tabKursanci');
+  el.innerHTML = '<tr><td class="pusto"><span class="kreci"></span></td></tr>';
+  try {
+    const k = await api('/api/kursanci');
+    el.innerHTML = k.length ? `
+      <tr><th>Kursant</th><th>E-mail</th><th>Kurs</th><th>Postęp</th></tr>` +
+      k.map(x => { const proc = x.etapow ? Math.round(100*x.zrobione/x.etapow) : 0;
+        return `<tr><td>${esc(x.imie)}</td><td class="cicho">${esc(x.email)}</td>
+        <td>${esc(x.kurs)}</td>
+        <td><div class="rzad"><div class="pasek"><i style="width:${proc}%"></i></div>
+        <span class="cicho">${x.zrobione} / ${x.etapow}</span></div></td></tr>`; }).join('')
+      : '<tr><td class="pusto">Nie masz jeszcze przypisanych kursantów.</td></tr>';
+  } catch (e) { el.innerHTML = `<tr><td class="pusto">${esc(e.message)}</td></tr>`; }
 }
 
-/* ══ MATERIAŁY ═══════════════════════════════════════════════════ */
+/* ══ MATERIAŁY (instruktor / admin) ══════════════════════════════ */
+$('mPlik').onchange = () => {
+  const f = $('mPlik').files[0];
+  $('mPlikNapis').textContent = f ? `${f.name} · ${rozmiar(f.size)}` : 'Wybierz plik…';
+  if (f && !$('mNazwa').value.trim()) $('mNazwa').value = f.name.replace(/\.[^.]+$/, '');
+};
+
+$('mDodaj').onclick = () => zPrzyciskiem($('mDodaj'), 'Wgrywam…', async () => {
+  const plik  = $('mPlik').files[0];
+  const nazwa = $('mNazwa').value.trim();
+  if (!plik)  return powiadom('Najpierw wybierz plik z komputera.', 'zle');
+  if (!nazwa) return powiadom('Podaj nazwę materiału.', 'zle');
+  if (plik.size > 25*1024*1024) return powiadom('Plik jest za duży. Limit to 25 MB.', 'zle');
+  const q = new URLSearchParams({ kurs_id: $('mKurs').value, typ: $('mTyp').value,
+                                  nazwa, plik: plik.name });
+  try {
+    const r = await fetch('/api/material/plik?' + q, {
+      method: 'POST',
+      headers: { 'Content-Type': plik.type || 'application/octet-stream' },
+      body: plik });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.blad || 'Nie udało się wgrać pliku.');
+    powiadom(`Wgrane: ${d.material.nazwa_pl}. Kursanci zobaczą po opublikowaniu.`);
+    $('mNazwa').value = ''; $('mPlik').value = ''; $('mPlikNapis').textContent = 'Wybierz plik…';
+    rysujMaterialy();
+  } catch (e) { powiadom(e.message, 'zle'); }
+});
+
 async function rysujMaterialy(){
   $('mKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  wczytuje($('matStan'), 'Wczytuję materiały…');
+  $('tabMaterialy').innerHTML = '';
   const wsz = [];
-  for (const k of KURSY){
-    const d = await api('/api/kurs?id=' + k.id);
-    d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa_pl }));
-  }
+  try {
+    for (const k of KURSY){
+      const d = await api('/api/kurs?id=' + k.id);
+      d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa_pl }));
+    }
+  } catch (e) { $('matStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
+  pusto($('matStan'));
   $('tabMaterialy').innerHTML = wsz.length ? `
     <tr><th>Materiał</th><th>Kurs</th><th>Typ</th><th>Stan</th><th></th></tr>` +
     wsz.map(m => `<tr>
-      <td>${esc(m.nazwa_pl)}<div class="cicho" style="font-size:11px">${esc(m.sciezka)}</div></td>
-      <td class="cicho">${esc(m.kurs)}</td><td><span class="plakietka">${esc(m.typ)}</span></td>
+      <td>${esc(m.nazwa_pl)}
+        <div class="cicho" style="font-size:11px">${esc(m.sciezka)}</div></td>
+      <td class="cicho">${esc(m.kurs)}</td>
+      <td><span class="plakietka">${esc(m.typ)}</span>
+        ${m.rozmiar_b ? `<div class="cicho" style="font-size:11px">${rozmiar(Number(m.rozmiar_b))}</div>`
+                      : '<div class="cicho" style="font-size:11px">bez pliku</div>'}</td>
       <td>${m.opublikowany ? '<span class="plakietka zrobione">opublikowany</span>'
                            : '<span class="plakietka ukryty">ukryty</span>'}</td>
-      <td><button class="przycisk cichy" data-pub="${m.id}" data-stan="${m.opublikowany}">
-        ${m.opublikowany ? 'Ukryj' : 'Opublikuj'}</button></td></tr>`).join('')
+      <td><div class="rzad">
+        ${m.rozmiar_b ? `<button class="przycisk cichy" data-otworz="${m.id}">Otwórz</button>` : ''}
+        <button class="przycisk cichy" data-pub="${m.id}" data-stan="${m.opublikowany}">
+          ${m.opublikowany ? 'Ukryj' : 'Opublikuj'}</button>
+        <button class="przycisk cichy" data-usun="${m.id}" data-nazwa="${esc(m.nazwa_pl)}">Usuń</button>
+      </div></td></tr>`).join('')
     : '<tr><td class="pusto">Brak materiałów.</td></tr>';
-  $('tabMaterialy').querySelectorAll('[data-pub]').forEach(b => b.onclick = async () => {
-    await api('/api/material/publikuj', { id: b.dataset.pub, opublikowany: b.dataset.stan !== 'true' });
-    rysujMaterialy();
+
+  podepnijOtwieranie($('tabMaterialy'));
+  $('tabMaterialy').querySelectorAll('[data-pub]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, '…', async () => {
+      try {
+        await api('/api/material/publikuj', { id: b.dataset.pub, opublikowany: b.dataset.stan !== 'true' });
+        powiadom(b.dataset.stan === 'true' ? 'Materiał ukryty.' : 'Materiał opublikowany.');
+        rysujMaterialy();
+      } catch (e) { powiadom(e.message, 'zle'); }
+    }));
+  $('tabMaterialy').querySelectorAll('[data-usun]').forEach(b => b.onclick = async () => {
+    if (!confirm(`Usunąć materiał „${b.dataset.nazwa}" razem z plikiem?`)) return;
+    zPrzyciskiem(b, '…', async () => {
+      try { await api('/api/material/usun', { id: b.dataset.usun });
+            powiadom('Materiał usunięty.'); rysujMaterialy(); }
+      catch (e) { powiadom(e.message, 'zle'); }
+    });
   });
 }
-$('mDodaj').onclick = async () => {
-  const nazwa = $('mNazwa').value.trim();
-  if (!nazwa) return;
-  const r = await api('/api/material',
-    { kurs_id: $('mKurs').value, typ: $('mTyp').value, nazwa_pl: nazwa, opublikowany: false });
-  if (r.blad) { alert(r.blad); return; }
-  $('mNazwa').value = ''; rysujMaterialy();
-};
 
 /* ══ PYTANIA ═════════════════════════════════════════════════════ */
 async function rysujPytania(){
   $('zadajBlok').style.display = JA.rola === 'kursant' ? '' : 'none';
-  const p = await api('/api/pytania');
-  $('tabPytania').innerHTML = p.length ? `
-    <tr><th>Kto</th><th>Kurs</th><th>Pytanie</th><th>Stan</th></tr>` +
-    p.map(x => `<tr><td>${esc(x.kursant)}</td><td class="cicho">${esc(x.kurs)}</td>
-      <td>${esc(x.tresc)}</td>
-      <td><span class="plakietka">${esc(x.status)}</span></td></tr>`).join('')
-    : '<tr><td class="pusto">Nie ma jeszcze żadnych pytań.</td></tr>';
+  wczytuje($('pytStan'), 'Wczytuję pytania…');
+  $('pytania').innerHTML = '';
+  try { PYTANIA = await api('/api/pytania'); }
+  catch (e) { $('pytStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
+  pusto($('pytStan'));
+  odswiezLicznik();
+
+  $('pytania').innerHTML = PYTANIA.length ? PYTANIA.map(p => `
+    <div class="karta pyt">
+      <div class="rzad">
+        <span class="plakietka ${p.status==='nowe'?'ukryty':'zrobione'}">${esc(p.status)}</span>
+        <span class="kto2">${esc(p.kursant)} · ${esc(p.kurs)}</span>
+      </div>
+      <div class="tresc2">${esc(p.tresc)}</div>
+      ${p.odpowiedz ? `<div class="odp"><b style="color:var(--ok)">Maliwan:</b> ${esc(p.odpowiedz)}</div>` : ''}
+      ${JA.rola !== 'kursant' ? `
+        <textarea class="pole" data-odp="${p.id}" rows="2"
+          placeholder="${p.odpowiedz ? 'Popraw odpowiedź…' : 'Napisz odpowiedź…'}">${esc(p.odpowiedz||'')}</textarea>
+        <div class="rzad">
+          <button class="przycisk glowny" data-zapisz="${p.id}">Zapisz odpowiedź</button>
+          ${p.status !== 'zamkniete'
+            ? `<button class="przycisk cichy" data-zamknij="${p.id}">Zamknij</button>` : ''}
+        </div>` : (p.odpowiedz ? '' : '<span class="cicho">Czeka na odpowiedź Maliwan.</span>')}
+    </div>`).join('')
+    : '<div class="karta pusto">Nie ma jeszcze żadnych pytań.</div>';
+
+  $('pytania').querySelectorAll('[data-zapisz]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, 'Zapisuję…', async () => {
+      const pole = $('pytania').querySelector(`[data-odp="${b.dataset.zapisz}"]`);
+      try {
+        await api('/api/pytanie/odpowiedz', { id: b.dataset.zapisz, odpowiedz: pole.value });
+        powiadom('Odpowiedź zapisana. Kursant już ją widzi.');
+        rysujPytania();
+      } catch (e) { powiadom(e.message, 'zle'); }
+    }));
+  $('pytania').querySelectorAll('[data-zamknij]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, '…', async () => {
+      try { await api('/api/pytanie/zamknij', { id: b.dataset.zamknij });
+            powiadom('Pytanie zamknięte.'); rysujPytania(); }
+      catch (e) { powiadom(e.message, 'zle'); }
+    }));
 }
-$('wyslijPytanie').onclick = async () => {
+
+function odswiezLicznik(){
+  const b = document.querySelector('#menu button[data-w="pytania"]');
+  if (!b) return;
+  const nowe = PYTANIA.filter(p => p.status === 'nowe' &&
+                (JA.rola !== 'kursant' || p.kursant_id === JA.id)).length;
+  b.innerHTML = 'Pytania' + (nowe && JA.rola !== 'kursant' ? `<span class="licznik">${nowe}</span>` : '');
+}
+
+$('wyslijPytanie').onclick = () => zPrzyciskiem($('wyslijPytanie'), 'Wysyłam…', async () => {
   const t = $('trescPytania').value.trim();
-  if (!t || !KURS) return;
-  const r = await api('/api/pytanie', { kurs_id: KURS.id, tresc: t });
-  if (r.blad) { alert(r.blad); return; }
-  $('trescPytania').value = ''; rysujPytania();
-};
+  if (!t)    return powiadom('Napisz treść pytania.', 'zle');
+  if (!KURS) return powiadom('Najpierw otwórz swoje szkolenie.', 'zle');
+  try {
+    await api('/api/pytanie', { kurs_id: KURS.id, tresc: t });
+    $('trescPytania').value = '';
+    powiadom('Pytanie wysłane do Maliwan.');
+    rysujPytania();
+  } catch (e) { powiadom(e.message, 'zle'); }
+});
 
 /* ══ KONTA (admin) ═══════════════════════════════════════════════ */
+$('zWyslij').onclick = () => zPrzyciskiem($('zWyslij'), 'Wysyłam…', async () => {
+  try {
+    const d = await api('/api/zapros', { imie: $('zImie').value, email: $('zEmail').value,
+                                         rola: $('zRola').value });
+    $('zImie').value = ''; $('zEmail').value = '';
+    powiadom(`Zaproszenie dla ${d.zaproszenie.imie} utworzone.`);
+    $('zWynik').innerHTML = `<div class="karta blok" style="gap:8px">
+      <span class="etykieta">Link dla ${esc(d.zaproszenie.email)}</span>
+      <code style="font-size:12px;word-break:break-all;color:var(--gold)">${esc(d.link_lokalny)}</code>
+      <span class="cicho">${esc(d.uwaga)}</span></div>`;
+  } catch (e) { powiadom(e.message, 'zle'); }
+});
+
 async function rysujKonta(){
-  KONTA = await api('/api/konta');
+  wczytuje($('kontaStan'), 'Wczytuję konta…'); $('tabKonta').innerHTML = '';
+  try { KONTA = await api('/api/konta'); }
+  catch (e) { $('kontaStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
+  pusto($('kontaStan'));
   $('tabKonta').innerHTML = `
     <tr><th>Imię</th><th>E-mail</th><th>Rola</th><th>Stan</th><th></th></tr>` +
     KONTA.map(k => `<tr>
       <td>${esc(k.imie)}</td><td class="cicho">${esc(k.email)}</td>
-      <td><select class="pole" data-rola="${k.id}" style="padding:5px 8px;max-width:140px">
+      <td><select class="pole" data-rola="${k.id}" style="padding:5px 8px;max-width:150px">
         ${['admin','instruktor','kursant'].map(r =>
           `<option value="${r}" ${r===k.rola?'selected':''}>${r}</option>`).join('')}
       </select></td>
@@ -424,37 +637,48 @@ async function rysujKonta(){
       <td><button class="przycisk cichy" data-akt="${k.id}" data-stan="${k.aktywne}">
         ${k.aktywne ? 'Wyłącz' : 'Włącz'}</button></td></tr>`).join('');
   $('tabKonta').querySelectorAll('[data-rola]').forEach(s => s.onchange = async () => {
-    const r = await api('/api/konto/rola', { id: s.dataset.rola, rola: s.value });
-    if (r.blad) alert(r.blad); rysujKonta();
+    try { const r = await api('/api/konto/rola', { id: s.dataset.rola, rola: s.value });
+          powiadom(`${r.imie} — rola zmieniona na ${r.rola}.`); }
+    catch (e) { powiadom(e.message, 'zle'); }
+    rysujKonta();
   });
-  $('tabKonta').querySelectorAll('[data-akt]').forEach(b => b.onclick = async () => {
-    const r = await api('/api/konto/aktywne', { id: b.dataset.akt, aktywne: b.dataset.stan !== 'true' });
-    if (r.blad) alert(r.blad); rysujKonta();
-  });
+  $('tabKonta').querySelectorAll('[data-akt]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, '…', async () => {
+      try { const r = await api('/api/konto/aktywne',
+              { id: b.dataset.akt, aktywne: b.dataset.stan !== 'true' });
+            powiadom(`${r.imie} — konto ${r.aktywne ? 'włączone' : 'wyłączone'}.`); }
+      catch (e) { powiadom(e.message, 'zle'); }
+      rysujKonta();
+    }));
 }
 
 /* ══ PRZYPISANIA (admin) ═════════════════════════════════════════ */
 async function rysujPrzypisania(){
   if (!KONTA.length) KONTA = await api('/api/konta');
-  $('pKursant').innerHTML = KONTA.filter(k => k.rola === 'kursant')
+  $('pKursant').innerHTML = KONTA.filter(k => k.rola === 'kursant' && k.aktywne)
     .map(k => `<option value="${k.id}">${esc(k.imie)} — ${esc(k.email)}</option>`).join('');
   $('pKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  const el = $('tabPrzypisania');
+  el.innerHTML = '<tr><td class="pusto"><span class="kreci"></span></td></tr>';
   const k = await api('/api/kursanci');
-  $('tabPrzypisania').innerHTML = k.length ? `
+  el.innerHTML = k.length ? `
     <tr><th>Kursant</th><th>Kurs</th><th></th></tr>` +
     k.map(x => `<tr><td>${esc(x.imie)}</td><td>${esc(x.kurs)}</td>
       <td><button class="przycisk cichy" data-odepnij="${x.id}" data-kurs="${x.kurs_id}">
         Odepnij</button></td></tr>`).join('')
     : '<tr><td class="pusto">Nikt nie jest jeszcze przypisany.</td></tr>';
-  $('tabPrzypisania').querySelectorAll('[data-odepnij]').forEach(b => b.onclick = async () => {
-    await api('/api/odepnij', { kursant_id: b.dataset.odepnij, kurs_id: b.dataset.kurs });
-    rysujPrzypisania();
-  });
+  el.querySelectorAll('[data-odepnij]').forEach(b => b.onclick = () =>
+    zPrzyciskiem(b, '…', async () => {
+      try { await api('/api/odepnij', { kursant_id: b.dataset.odepnij, kurs_id: b.dataset.kurs });
+            powiadom('Kursant odpięty od kursu.'); rysujPrzypisania(); }
+      catch (e) { powiadom(e.message, 'zle'); }
+    }));
 }
-$('pDodaj').onclick = async () => {
-  const r = await api('/api/przypisz', { kursant_id: $('pKursant').value, kurs_id: $('pKurs').value });
-  if (r.blad) alert(r.blad); rysujPrzypisania();
-};
+$('pDodaj').onclick = () => zPrzyciskiem($('pDodaj'), 'Przypisuję…', async () => {
+  try { await api('/api/przypisz', { kursant_id: $('pKursant').value, kurs_id: $('pKurs').value });
+        powiadom('Kursant przypisany do kursu.'); rysujPrzypisania(); }
+  catch (e) { powiadom(e.message, 'zle'); }
+});
 
 /* ══ WYLOGOWANIE ═════════════════════════════════════════════════ */
 $('wyloguj').onclick = async () => {
@@ -464,7 +688,8 @@ $('wyloguj').onclick = async () => {
 
 /* ══ START ═══════════════════════════════════════════════════════ */
 (async () => {
-  const d = await api('/api/ja');
+  let d;
+  try { d = await api('/api/ja'); } catch { return; }
   JA = d.profil;
   $('imie').textContent = JA.imie;
   $('rola').textContent = JA.rola;

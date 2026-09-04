@@ -23,14 +23,20 @@ create table if not exists auth.users (
 );
 
 -- Dokładnie ta sama definicja, której używa Supabase.
+-- Odporna na brak/pusty GUC — Supabase zawsze podaje poprawny JSON,
+-- lokalnie chcemy, zeby anon po prostu nie mial tozsamosci, a nie blad.
 create or replace function auth.uid() returns uuid
 language sql stable as $$
-  select nullif(current_setting('request.jwt.claims', true)::json->>'sub','')::uuid
+  select nullif(
+    coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::json->>'sub',
+  '')::uuid
 $$;
 
 create or replace function auth.role() returns text
 language sql stable as $$
-  select coalesce(nullif(current_setting('request.jwt.claims', true)::json->>'role',''), 'anon')
+  select coalesce(nullif(
+    coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::json->>'role',
+  ''), 'anon')
 $$;
 
 grant usage on schema auth to anon, authenticated, service_role;

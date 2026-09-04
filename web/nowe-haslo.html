@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AsterA Coach — ustaw hasło</title>
+<link rel="stylesheet" href="wspolne.css">
+<style>
+body{display:grid;place-items:center;padding:24px}
+.ekran{width:min(430px,100%);display:flex;flex-direction:column;gap:20px}
+.naglowek{display:flex;flex-direction:column;gap:14px;align-items:center;text-align:center}
+h1{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:.6px;line-height:1.2}
+.podtytul{color:var(--mut);font-size:13.5px;max-width:36ch}
+form{padding:26px;display:flex;flex-direction:column;gap:16px}
+label{display:flex;flex-direction:column;gap:7px;font-size:12px;letter-spacing:1.6px;
+  text-transform:uppercase;color:var(--mut)}
+.komunikat{display:none;padding:11px 13px;border-radius:10px;font-size:13.5px}
+.komunikat.widac{display:block}
+.komunikat.zle{border:1px solid var(--zle);background:var(--zlesoft);color:#F3C9BB}
+.komunikat.ok{border:1px solid var(--ok);background:var(--oksoft);color:#D7EADD}
+.sila{height:4px;border-radius:3px;background:rgba(224,188,119,.14);overflow:hidden}
+.sila i{display:block;height:100%;width:0;background:var(--zle);transition:width .2s,background .2s}
+.wskazowki{font-size:12px;color:var(--mut);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="ekran">
+  <div class="naglowek">
+    <div class="marka">
+      <span class="znak"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3c1.6 3 1.6 6.4 0 9.4C10.4 9.4 10.4 6 12 3z"/>
+        <path d="M12 12.4c-2.2-2-5-2.6-7.6-1.8.9 3.6 4 5.8 7.6 6.4 3.6-.6 6.7-2.8 7.6-6.4-2.6-.8-5.4-.2-7.6 1.8z"/>
+        <path d="M4 18c2.4 1.6 5.1 2.4 8 2.4s5.6-.8 8-2.4"/></svg></span>
+      <span><b>ASTERA</b><span>Coach · Szkoła Maliwan</span></span>
+    </div>
+    <h1 id="tytul">Ustaw hasło</h1>
+    <p class="podtytul" id="podtytul">Wpisz hasło, którym będziesz się logować.</p>
+  </div>
+
+  <form class="karta" id="formularz">
+    <div class="komunikat" id="komunikat" role="alert"></div>
+    <label>Nowe hasło
+      <input class="pole" type="password" id="haslo" required minlength="10"
+             autocomplete="new-password" placeholder="co najmniej 10 znaków">
+    </label>
+    <div class="sila"><i id="sila"></i></div>
+    <label>Powtórz hasło
+      <input class="pole" type="password" id="haslo2" required
+             autocomplete="new-password" placeholder="jeszcze raz to samo">
+    </label>
+    <p class="wskazowki">Dobre hasło to trzy niepowiązane słowa i cyfra —
+      łatwiej je zapamiętać niż ciąg znaków, a jest trudniejsze do złamania.</p>
+    <button class="przycisk glowny" type="submit" id="wyslij">Zapisz hasło</button>
+  </form>
+
+  <p class="cicho" style="text-align:center">
+    <a href="index.html" style="text-decoration:none;border-bottom:1px solid var(--line2)">
+      Wróć do logowania</a></p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const parametry = new URLSearchParams(location.search);
+const ZAPROSZENIE = parametry.get('zaproszenie');
+const RESET       = parametry.get('token') || location.hash.includes('access_token');
+
+if (ZAPROSZENIE){
+  $('tytul').textContent = 'Ustaw hasło do nowego konta';
+  $('podtytul').textContent =
+    'Konto zostało dla Ciebie założone przez szkołę. Wybierz hasło i zaloguj się.';
+}
+
+function pokaz(tekst, rodzaj){
+  const k = $('komunikat');
+  k.className = 'komunikat widac ' + rodzaj;
+  k.textContent = tekst;
+}
+
+$('haslo').addEventListener('input', () => {
+  const h = $('haslo').value;
+  let p = 0;
+  if (h.length >= 10) p += 40;
+  if (h.length >= 16) p += 20;
+  if (/[a-z]/.test(h) && /[A-Z]/.test(h)) p += 15;
+  if (/[0-9]/.test(h)) p += 15;
+  if (/[^A-Za-z0-9]/.test(h)) p += 10;
+  const i = $('sila');
+  i.style.width = Math.min(p,100) + '%';
+  i.style.background = p < 50 ? 'var(--zle)' : p < 80 ? 'var(--gold)' : 'var(--ok)';
+});
+
+$('formularz').addEventListener('submit', async e => {
+  e.preventDefault();
+  const h = $('haslo').value, h2 = $('haslo2').value;
+  if (h.length < 10)  return pokaz('Hasło musi mieć co najmniej 10 znaków.', 'zle');
+  if (h !== h2)       return pokaz('Hasła nie są takie same.', 'zle');
+
+  $('wyslij').disabled = true; $('wyslij').textContent = 'Zapisuję…';
+  try {
+    /* PRODUKCJA (Supabase):
+         zaproszenie → supabase.auth.verifyOtp({ token_hash, type:'invite' })
+                       potem supabase.auth.updateUser({ password: h })
+         reset hasła → link z e-maila loguje sesję odzyskiwania,
+                       potem supabase.auth.updateUser({ password: h })
+       Podłącza to web/dane-supabase.js (funkcje `przyjmijZaproszenie`
+       i `ustawHaslo`). Lokalnie nie ma warstwy Auth, więc pokazujemy,
+       co się wydarzy — bez udawania, że hasło zostało zapisane.       */
+    if (window.DANE_SUPABASE) {
+      if (ZAPROSZENIE) await window.DANE_SUPABASE.przyjmijZaproszenie(ZAPROSZENIE, h);
+      else             await window.DANE_SUPABASE.ustawHaslo(h);
+      pokaz('Hasło zapisane. Za chwilę przeniesiemy Cię do logowania.', 'ok');
+      setTimeout(() => location.href = 'index.html', 1600);
+    } else {
+      pokaz('Wersja lokalna nie ma warstwy Auth — hasłami zarządza Supabase. '
+          + 'Ten ekran działa w pełni dopiero po podpięciu projektu Supabase.', 'zle');
+    }
+  } catch (err) {
+    pokaz(err.message || 'Nie udało się zapisać hasła. Link mógł wygasnąć.', 'zle');
+  } finally {
+    $('wyslij').disabled = false; $('wyslij').textContent = 'Zapisz hasło';
+  }
+});
+</script>
+</body>
+</html>

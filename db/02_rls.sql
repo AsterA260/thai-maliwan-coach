@@ -27,7 +27,6 @@ returns boolean language sql stable security definer set search_path = public as
                    where id = auth.uid() and aktywne), false)
 $$;
 
--- Czy jestem instruktorem TEGO kursu
 create or replace function public.prowadze_kurs(p_kurs uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.kurs k
@@ -35,7 +34,6 @@ returns boolean language sql stable security definer set search_path = public as
      and public.jestem_instruktorem()
 $$;
 
--- Czy jestem kursantem przypisanym do TEGO kursu
 create or replace function public.zapisany_na_kurs(p_kurs uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -47,7 +45,6 @@ returns boolean language sql stable security definer set search_path = public as
   )
 $$;
 
--- Wspólny warunek czytania kursu
 create or replace function public.moge_czytac_kurs(p_kurs uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select public.jestem_adminem()
@@ -63,43 +60,33 @@ returns uuid language sql stable security definer set search_path = public as $$
 $$;
 
 -- ── WŁĄCZ RLS WSZĘDZIE ────────────────────────────────────────────
-alter table public.profile     enable row level security;
-alter table public.kurs        enable row level security;
-alter table public.przypisanie enable row level security;
-alter table public.lekcja      enable row level security;
-alter table public.etap        enable row level security;
-alter table public.material    enable row level security;
-alter table public.postep      enable row level security;
-alter table public.pytanie     enable row level security;
-
-alter table public.profile     force row level security;
-alter table public.kurs        force row level security;
-alter table public.przypisanie force row level security;
-alter table public.lekcja      force row level security;
-alter table public.etap        force row level security;
-alter table public.material    force row level security;
-alter table public.postep      force row level security;
-alter table public.pytanie     force row level security;
+do $$
+declare t text;
+begin
+  foreach t in array array['profile','kurs','przypisanie','lekcja','etap',
+                           'material','postep','pytanie','zaproszenie'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('alter table public.%I force  row level security', t);
+  end loop;
+end $$;
 
 -- ═══ PROFILE ═══════════════════════════════════════════════════════
 drop policy if exists profile_select on public.profile;
 create policy profile_select on public.profile for select using (
-      id = auth.uid()                                  -- swoje konto
-   or public.jestem_adminem()                          -- admin widzi wszystkich
-   or (public.jestem_instruktorem() and exists (       -- instruktor: tylko
-        select 1 from public.przypisanie p             -- kursanci jego kursow
+      id = auth.uid()
+   or public.jestem_adminem()
+   or (public.jestem_instruktorem() and exists (
+        select 1 from public.przypisanie p
         join public.kurs k on k.id = p.kurs_id
         where p.kursant_id = profile.id
           and k.instruktor_id = auth.uid() and p.aktywne))
 );
 
--- Rolę i aktywność zmienia WYŁĄCZNIE admin.
+-- Zmiana własnego profilu: dozwolona, ale wyzwalacz `profil_ochrona`
+-- i tak przywraca e-mail, rolę i aktywność do poprzednich wartości.
 drop policy if exists profile_update_wlasny on public.profile;
 create policy profile_update_wlasny on public.profile for update
-  using  (id = auth.uid())
-  with check (id = auth.uid()
-              and rola = (select rola from public.profile p2 where p2.id = auth.uid())
-              and aktywne = (select aktywne from public.profile p2 where p2.id = auth.uid()));
+  using  (id = auth.uid()) with check (id = auth.uid());
 
 drop policy if exists profile_admin_all on public.profile;
 create policy profile_admin_all on public.profile for all
@@ -107,15 +94,12 @@ create policy profile_admin_all on public.profile for all
 
 -- ═══ KURSY ═════════════════════════════════════════════════════════
 drop policy if exists kurs_select on public.kurs;
-create policy kurs_select on public.kurs for select using (
-  public.moge_czytac_kurs(id)
-);
+create policy kurs_select on public.kurs for select using (public.moge_czytac_kurs(id));
 
 drop policy if exists kurs_admin_all on public.kurs;
 create policy kurs_admin_all on public.kurs for all
   using (public.jestem_adminem()) with check (public.jestem_adminem());
 
--- Instruktor może zmieniać swój kurs, ale nie może go sobie przepisać
 drop policy if exists kurs_instruktor_update on public.kurs;
 create policy kurs_instruktor_update on public.kurs for update
   using (public.prowadze_kurs(id))
@@ -170,7 +154,9 @@ create policy etap_instruktor_all on public.etap for all
                   where l.id = etap.lekcja_id and public.prowadze_kurs(l.kurs_id)));
 
 -- ═══ MATERIAŁY ═════════════════════════════════════════════════════
--- Kursant widzi materiał tylko z przypisanego kursu i tylko opublikowany.
+--  Kursant widzi materiał tylko z przypisanego kursu i tylko opublikowany.
+--  Dodatkowo ograniczenie CHECK w tabeli pilnuje, żeby kurs w ścieżce
+--  pliku był tym samym kursem co kurs_id — zapisu obok nie da się zrobić.
 drop policy if exists material_select on public.material;
 create policy material_select on public.material for select using (
       public.jestem_adminem()
@@ -181,14 +167,21 @@ create policy material_select on public.material for select using (
 
 drop policy if exists material_admin_all on public.material;
 create policy material_admin_all on public.material for all
-  using (public.jestem_adminem()) with check (public.jestem_adminem());
+  using (public.jestem_adminem())
+  with check (public.jestem_adminem()
+              and public.kurs_ze_sciezki(sciezka) = kurs_id);
 
 drop policy if exists material_instruktor_all on public.material;
 create policy material_instruktor_all on public.material for all
-  using (public.prowadze_kurs(kurs_id)) with check (public.prowadze_kurs(kurs_id));
+  using (public.prowadze_kurs(kurs_id))
+  with check (public.prowadze_kurs(kurs_id)
+              and public.kurs_ze_sciezki(sciezka) = kurs_id
+              and public.prowadze_kurs(public.kurs_ze_sciezki(sciezka)));
 
 -- ═══ POSTĘPY ═══════════════════════════════════════════════════════
--- Kursant widzi i zmienia WYŁĄCZNIE swoje.
+--  Kursant widzi i zmienia WYŁĄCZNIE swoje, i tylko na kursach,
+--  na które jest zapisany. Przepięcie postępu na etap innego kursu
+--  odrzuca polityka i dodatkowo wyzwalacz `postep_spojnosc`.
 drop policy if exists postep_select on public.postep;
 create policy postep_select on public.postep for select using (
       kursant_id = auth.uid()
@@ -204,7 +197,13 @@ create policy postep_kursant_insert on public.postep for insert with check (
 
 drop policy if exists postep_kursant_update on public.postep;
 create policy postep_kursant_update on public.postep for update
-  using (kursant_id = auth.uid()) with check (kursant_id = auth.uid());
+  using  (kursant_id = auth.uid())
+  with check (kursant_id = auth.uid()
+              and public.zapisany_na_kurs(public.kurs_etapu(etap_id)));
+
+drop policy if exists postep_kursant_delete on public.postep;
+create policy postep_kursant_delete on public.postep for delete
+  using (kursant_id = auth.uid());
 
 drop policy if exists postep_admin_all on public.postep;
 create policy postep_admin_all on public.postep for all
@@ -223,17 +222,45 @@ create policy pytanie_kursant_insert on public.pytanie for insert with check (
   kursant_id = auth.uid() and public.zapisany_na_kurs(kurs_id)
 );
 
+-- Instruktor odpowiada. Wyzwalacz `pytanie_ochrona` przywraca
+-- autora, kurs, etap i treść — może zmienić tylko odpowiedź i status.
 drop policy if exists pytanie_instruktor_update on public.pytanie;
 create policy pytanie_instruktor_update on public.pytanie for update
   using (public.prowadze_kurs(kurs_id) or public.jestem_adminem())
   with check (public.prowadze_kurs(kurs_id) or public.jestem_adminem());
 
--- ── UPRAWNIENIA TABELOWE ──────────────────────────────────────────
--- anon nie dostaje nic. Cała reszta i tak przechodzi przez RLS.
-revoke all on all tables in schema public from anon, authenticated;
+drop policy if exists pytanie_admin_all on public.pytanie;
+create policy pytanie_admin_all on public.pytanie for all
+  using (public.jestem_adminem()) with check (public.jestem_adminem());
+
+-- ═══ ZAPROSZENIA — wyłącznie admin ═════════════════════════════════
+drop policy if exists zaproszenie_admin on public.zaproszenie;
+create policy zaproszenie_admin on public.zaproszenie for all
+  using (public.jestem_adminem()) with check (public.jestem_adminem());
+
+-- ═══════════════════════════════════════════════════════════════════
+--  UPRAWNIENIA TABELOWE I FUNKCYJNE
+--  Domyślnie nic. Nadajemy tylko to, co naprawdę potrzebne.
+-- ═══════════════════════════════════════════════════════════════════
+revoke all on all tables    in schema public from anon, authenticated;
+revoke all on all functions in schema public from anon, authenticated, public;
+revoke all on all routines  in schema public from anon, authenticated, public;
+
 grant usage on schema public to anon, authenticated;
+
 grant select, insert, update, delete on
   public.profile, public.kurs, public.przypisanie, public.lekcja,
-  public.etap, public.material, public.postep, public.pytanie
+  public.etap, public.material, public.postep, public.pytanie, public.zaproszenie
   to authenticated;
-grant execute on all functions in schema public to authenticated;
+
+-- Tylko funkcje, których naprawdę używa aplikacja i polityki.
+-- Wyzwalacze i funkcje SECURITY DEFINER wywołują się z wnętrza bazy,
+-- więc nie muszą być dostępne dla roli `authenticated`.
+grant execute on function public.moja_rola()                to authenticated;
+grant execute on function public.jestem_adminem()           to authenticated;
+grant execute on function public.jestem_instruktorem()      to authenticated;
+grant execute on function public.prowadze_kurs(uuid)        to authenticated;
+grant execute on function public.zapisany_na_kurs(uuid)     to authenticated;
+grant execute on function public.moge_czytac_kurs(uuid)     to authenticated;
+grant execute on function public.kurs_etapu(uuid)           to authenticated;
+grant execute on function public.kurs_ze_sciezki(text)      to authenticated;

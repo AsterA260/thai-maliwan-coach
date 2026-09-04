@@ -2,7 +2,10 @@
 
 Zamknięta platforma szkoleniowa z prawdziwym logowaniem i trzema rolami.
 Nic nie jest opublikowane, nic nie poszło na GitHuba, wersja produkcyjna
-strony szkoły nietknięta. Gałąź: **`platforma`**.
+strony szkoły nietknięta. Gałąź: **`platforma-poprawki`**.
+
+Co zmieniło się po audycie — patrz `RAPORT_ZMIAN.md`.
+Czego jeszcze nie sprawdziliśmy — `testy/oczekujace.md`.
 
 ---
 
@@ -28,12 +31,15 @@ python3 db/import_xlsx.py AsterA_Coach_Baza_Tresci.xlsx > db/05_import.sql
 psql -h /tmp -p 5433 -U postgres -d coach -f db/05_import.sql
 
 # aplikacja
-npm install pg
-node serwer/dev.js          # → http://127.0.0.1:8910
+npm install
+npm start                   # → http://127.0.0.1:8910
 
-# testy bezpieczeństwa
-node testy/bezpieczenstwo.js
+# wszystkie testy (baza + HTTP + import)
+npm run testy
 ```
+
+Wgrane pliki lądują w `magazyn/materialy/kurs/<id>/<typ>/…` — to lokalny
+odpowiednik prywatnego bucketu. Katalog jest w `.gitignore`.
 
 **Konta demonstracyjne** (tylko lokalnie, hasła w `serwer/dev.js`):
 
@@ -81,7 +87,16 @@ create trigger na_nowego_uzytkownika
 **Storage → New bucket** → nazwa `materialy`, **Public: WYŁĄCZONE**.
 Polityki zakłada `db/03_storage.sql`.
 
-### 2.4 Wyłączenie publicznej rejestracji
+### 2.4 Edge Function do zapraszania
+
+```bash
+supabase functions deploy zapros
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... ADRES_APLIKACJI=https://coach.thaimaliwan.pl
+```
+
+Klucz `service_role` zostaje po stronie Supabase. Front go nigdy nie widzi.
+
+### 2.5 Wyłączenie publicznej rejestracji
 
 **Authentication → Providers → Email**:
 
@@ -92,7 +107,7 @@ Polityki zakłada `db/03_storage.sql`.
 **Authentication → URL Configuration** → `Site URL` = adres aplikacji
 (np. `https://coach.thaimaliwan.pl`).
 
-### 2.5 Pierwsze konta
+### 2.6 Pierwsze konta
 
 **Authentication → Users → Invite user** dla każdej osoby. Po założeniu,
 w SQL Editor, nadaj role:
@@ -102,7 +117,7 @@ update public.profile set rola = 'admin'      where email = 'norbert@thaimaliwan
 update public.profile set rola = 'instruktor' where email = 'maliwan@thaimaliwan.pl';
 ```
 
-### 2.6 Kursy i treść
+### 2.7 Kursy i treść
 
 ```sql
 -- kursy zgodne ze stroną szkoły
@@ -113,7 +128,7 @@ values ('podstawowy','Tradycyjny masaż tajski','นวดแผนไทยด�
 
 Potem uruchom `db/05_import.sql` (wygenerowany z arkusza).
 
-### 2.7 Front
+### 2.8 Front
 
 W `.env` (z `.env.example`) uzupełnij `SUPABASE_URL` i `SUPABASE_ANON_KEY`,
 a w `app.html` podmień funkcję `api` na moduł `web/dane-supabase.js`.
@@ -135,7 +150,12 @@ Klucz **service role** nie pojawia się we froncie **nigdy**.
 | `web/index.html` | ekran logowania |
 | `web/app.html` | aplikacja — orbita na laptopie, lista na telefonie |
 | `web/dane-supabase.js` | warstwa danych na produkcji |
-| `testy/bezpieczenstwo.js` | dziewięć testów na prawdziwej bazie |
+| `testy/bezpieczenstwo.js` | 15 testów bazy i polityk RLS |
+| `testy/http.js` | 16 testów przez HTTP: sesje, pliki, uprawnienia |
+| `testy/import.js` | 5 testów importu (idempotencja, postępy) |
+| `testy/oczekujace.md` | **20 scenariuszy, których lokalnie nie da się sprawdzić** |
+| `web/nowe-haslo.html` | ustawienie hasła z zaproszenia albo resetu |
+| `supabase/functions/zapros/` | Edge Function — jedyne miejsce z `service_role` |
 
 ---
 

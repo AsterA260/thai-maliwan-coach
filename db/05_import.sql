@@ -2,8 +2,11 @@
 -- Źródło: AsterA_Coach_Baza_Tresci.xlsx
 begin;
 
--- Idempotentnie: czyścimy poprzedni import tego kursu
-delete from public.lekcja where kurs_id = (select id from public.kurs where kod = 'podstawowy');
+-- BEZPIECZNY UPSERT. Ponowne uruchomienie:
+--   * nie kasuje lekcji ani etapow,
+--   * nie rusza postepow kursantow (tabela public.postep),
+--   * nie dubluje materialow (klucz: sciezka).
+-- Etap dodany recznie w aplikacji zostaje. Zmieniony w arkuszu — uaktualnia sie.
 
 insert into public.lekcja (kurs_id, dzien, tytul_pl, tytul_th, kolejnosc, opublikowana)
 select id, 1, 'Dzień 1', 'วันที่ 1', 1, true from public.kurs where kod = 'podstawowy'
@@ -26,7 +29,16 @@ select l.id, 'D1-01', '09:00', '🙏',
  '["Czego oczekujesz od kursu?"]'::jsonb, 1, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -44,7 +56,16 @@ select l.id, 'D1-02', '09:20', '📖',
  '["Skąd pochodzi masaż tajski?"]'::jsonb, 2, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -62,7 +83,16 @@ select l.id, 'D1-03', '09:45', '🛡️',
  '["Których miejsc nie wolno mocno uciskać?"]'::jsonb, 3, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -80,7 +110,16 @@ select l.id, 'D1-04', '10:15', '🧘',
  '["Dlaczego pracujemy całym ciałem?"]'::jsonb, 4, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -98,7 +137,16 @@ select l.id, 'D1-05', '11:00', '👀',
  '["Jaka jest kolejność ruchów?"]'::jsonb, 5, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -116,7 +164,16 @@ select l.id, 'D1-06', '12:00', '🤲',
  '["Jak sprawdzić, czy nacisk jest dobry?"]'::jsonb, 6, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -134,7 +191,16 @@ select l.id, 'D1-07', '14:00', '💆',
  '["Gdzie NIE naciskać na plecach?"]'::jsonb, 7, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -152,7 +218,16 @@ select l.id, 'D1-08', '15:30', '🔍',
  '["Jaki błąd popełniasz najczęściej?"]'::jsonb, 8, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -170,7 +245,16 @@ select l.id, 'D1-09', '16:30', '🌟',
  '["Co zapamiętasz z dziś?"]'::jsonb, 9, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 insert into public.etap
  (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th, czas_min, cel_pl, cel_th,
   agent_mowi_pl, agent_mowi_th, pokazuje_pl, pokazuje_th,
@@ -188,36 +272,53 @@ select l.id, 'D1-10', '17:00', '🍵',
  '["O co chcesz jeszcze zapytać?"]'::jsonb, 10, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = 'podstawowy' and l.dzien = 1
-on conflict (lekcja_id, kod) do nothing;
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;
 
 insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka, opublikowany)
 select k.id,
  (select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
-   where l.kurs_id=k.id and '09:45 Zasady bezpieczeństwa' like '%'||e.godzina||'%' limit 1),
+   where l.kurs_id=k.id and '09:45 Zasady bezpieczeństwa' like '%'||coalesce(e.godzina,'~')||'%' limit 1),
  'zdjecie', 'Mapa ciała — strefy wrażliwe', 'Zdjęcie z miejscami wrażliwymi',
- 'kurs/'||k.id||'/zdjecie/'||replace(lower('Mapa ciała — strefy wrażliwe'),' ','-'), false
-from public.kurs k where k.kod = 'podstawowy';
+ 'kurs/'||k.id||'/zdjecie/mapa-ciala-strefy-wrazliwe', false
+from public.kurs k where k.kod = 'podstawowy'
+on conflict (sciezka) do update set
+ nazwa_pl = excluded.nazwa_pl, opis = excluded.opis, etap_id = excluded.etap_id;
 insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka, opublikowany)
 select k.id,
  (select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
-   where l.kurs_id=k.id and '09:45 Zasady bezpieczeństwa' like '%'||e.godzina||'%' limit 1),
+   where l.kurs_id=k.id and '09:45 Zasady bezpieczeństwa' like '%'||coalesce(e.godzina,'~')||'%' limit 1),
  'wideo', 'Demo bezpiecznego nacisku (40s)', 'Krótkie demo poprawnego nacisku',
- 'kurs/'||k.id||'/wideo/'||replace(lower('Demo bezpiecznego nacisku (40s)'),' ','-'), false
-from public.kurs k where k.kod = 'podstawowy';
+ 'kurs/'||k.id||'/wideo/demo-bezpiecznego-nacisku-40s', false
+from public.kurs k where k.kod = 'podstawowy'
+on conflict (sciezka) do update set
+ nazwa_pl = excluded.nazwa_pl, opis = excluded.opis, etap_id = excluded.etap_id;
 insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka, opublikowany)
 select k.id,
  (select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
-   where l.kurs_id=k.id and '11:00 Demonstracja' like '%'||e.godzina||'%' limit 1),
+   where l.kurs_id=k.id and '11:00 Demonstracja' like '%'||coalesce(e.godzina,'~')||'%' limit 1),
  'wideo', 'Pełna sekwencja — leżenie na brzuchu', 'Nagranie całej sekwencji',
- 'kurs/'||k.id||'/wideo/'||replace(lower('Pełna sekwencja — leżenie na brzuchu'),' ','-'), false
-from public.kurs k where k.kod = 'podstawowy';
+ 'kurs/'||k.id||'/wideo/pelna-sekwencja-lezenie-na-brzuchu', false
+from public.kurs k where k.kod = 'podstawowy'
+on conflict (sciezka) do update set
+ nazwa_pl = excluded.nazwa_pl, opis = excluded.opis, etap_id = excluded.etap_id;
 insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka, opublikowany)
 select k.id,
  (select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
-   where l.kurs_id=k.id and '14:00 Plecy, talia, biodra' like '%'||e.godzina||'%' limit 1),
+   where l.kurs_id=k.id and '14:00 Plecy, talia, biodra' like '%'||coalesce(e.godzina,'~')||'%' limit 1),
  'zdjecie', 'Schemat stref pleców', 'Rysunek stref bezpiecznych',
- 'kurs/'||k.id||'/zdjecie/'||replace(lower('Schemat stref pleców'),' ','-'), false
-from public.kurs k where k.kod = 'podstawowy';
+ 'kurs/'||k.id||'/zdjecie/schemat-stref-plecow', false
+from public.kurs k where k.kod = 'podstawowy'
+on conflict (sciezka) do update set
+ nazwa_pl = excluded.nazwa_pl, opis = excluded.opis, etap_id = excluded.etap_id;
 
 -- Baza wiedzy z arkusza ③ (na razie jako komentarz — do osobnej tabeli FAQ)
 --   Jak mocno kursant ma naciskać na początku? / ในช่วงแรกควรกดแรงแค่ไหน?

@@ -1,5 +1,17 @@
 {
   "dependencies": {
     "pg": "^8.23.0"
+  },
+  "name": "astera-coach",
+  "version": "0.2.0",
+  "description": "AsterA Coach — zamknięta platforma szkoleniowa Szkoły Maliwan",
+  "private": true,
+  "scripts": {
+    "start": "node serwer/dev.js",
+    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js",
+    "testy:baza": "node testy/bezpieczenstwo.js",
+    "testy:http": "node testy/http.js",
+    "testy:import": "node testy/import.js",
+    "import": "python3 db/import_xlsx.py AsterA_Coach_Baza_Tresci.xlsx > db/05_import.sql"
   }
 }

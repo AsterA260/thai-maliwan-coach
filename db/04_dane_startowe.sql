@@ -73,6 +73,6 @@ values ('cccccccc-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-00000000
         'pdf','Mapa stref na stopie',
         'kurs/aaaaaaaa-0000-0000-0000-000000000002/pdf/mapa-stref.pdf', true,
         '22222222-2222-2222-2222-222222222222')
-on conflict (id) do nothing;
+on conflict (sciezka) do nothing;
 
 commit;

@@ -20,6 +20,13 @@ def sql(v):
         return 'null'
     return "'" + str(v).strip().replace("'", "''") + "'"
 
+ZNAKI = str.maketrans('ąćęłńóśżźĄĆĘŁŃÓŚŻŹ', 'acelnoszzACELNOSZZ')
+def slug(s):
+    import re as _re
+    s = str(s).translate(ZNAKI).lower()
+    s = _re.sub(r'[^a-z0-9]+', '-', s).strip('-')
+    return s or 'plik'
+
 def wiersze(ws):
     it = ws.iter_rows(values_only=True)
     naglowki = [str(c).strip() if c else '' for c in next(it)]
@@ -48,8 +55,11 @@ w('-- WYGENEROWANE PRZEZ db/import_xlsx.py — nie edytuj ręcznie')
 w('-- Źródło: ' + PLIK)
 w('begin;')
 w('')
-w("-- Idempotentnie: czyścimy poprzedni import tego kursu")
-w(f"delete from public.lekcja where kurs_id = (select id from public.kurs where kod = '{KURS_KOD}');")
+w("-- BEZPIECZNY UPSERT. Ponowne uruchomienie:")
+w("--   * nie kasuje lekcji ani etapow,")
+w("--   * nie rusza postepow kursantow (tabela public.postep),")
+w("--   * nie dubluje materialow (klucz: sciezka).")
+w("-- Etap dodany recznie w aplikacji zostaje. Zmieniony w arkuszu — uaktualnia sie.")
 w('')
 
 # ── etapy po tajsku, po kluczu ID ─────────────────────────────────
@@ -94,7 +104,16 @@ select l.id, {sql(kod)}, {sql(e.get('Godzina'))}, {sql(e.get('Ikona'))},
  {sql(json.dumps(pyt, ensure_ascii=False))}::jsonb, {i}, true
 from public.lekcja l join public.kurs k on k.id = l.kurs_id
 where k.kod = '{KURS_KOD}' and l.dzien = {int(e.get('Dzień') or 1)}
-on conflict (lekcja_id, kod) do nothing;""")
+on conflict (lekcja_id, kod) do update set
+ godzina = excluded.godzina, ikona = excluded.ikona,
+ nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
+ czas_min = excluded.czas_min, cel_pl = excluded.cel_pl, cel_th = excluded.cel_th,
+ agent_mowi_pl = excluded.agent_mowi_pl, agent_mowi_th = excluded.agent_mowi_th,
+ pokazuje_pl = excluded.pokazuje_pl, pokazuje_th = excluded.pokazuje_th,
+ kursanci_robia_pl = excluded.kursanci_robia_pl, kursanci_robia_th = excluded.kursanci_robia_th,
+ uwaga_pl = excluded.uwaga_pl, uwaga_th = excluded.uwaga_th,
+ podsumowanie_pl = excluded.podsumowanie_pl, podsumowanie_th = excluded.podsumowanie_th,
+ pytania = excluded.pytania, kolejnosc = excluded.kolejnosc;""")
 w('')
 
 # ── materiały ─────────────────────────────────────────────────────
@@ -107,13 +126,16 @@ if mat_pl:
             continue
         typ = TYPY.get(str(m.get('Typ (foto/wideo/pdf/audio)') or '').strip().lower(), 'inny')
         etap_txt = str(m.get('Etap') or '').strip()
+        klucz = slug(nazwa)
         w(f"""insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka, opublikowany)
 select k.id,
  (select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
-   where l.kurs_id=k.id and {sql(etap_txt)} like '%'||e.godzina||'%' limit 1),
+   where l.kurs_id=k.id and {sql(etap_txt)} like '%'||coalesce(e.godzina,'~')||'%' limit 1),
  '{typ}', {sql(nazwa)}, {sql(m.get('Opis'))},
- 'kurs/'||k.id||'/{typ}/'||replace(lower({sql(nazwa)}),' ','-'), false
-from public.kurs k where k.kod = '{KURS_KOD}';""")
+ 'kurs/'||k.id||'/{typ}/{klucz}', false
+from public.kurs k where k.kod = '{KURS_KOD}'
+on conflict (sciezka) do update set
+ nazwa_pl = excluded.nazwa_pl, opis = excluded.opis, etap_id = excluded.etap_id;""")
 w('')
 
 # ── baza wiedzy → pytania kontrolne przy etapach ──────────────────
