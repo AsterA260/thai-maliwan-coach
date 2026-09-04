@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AsterA Coach — logowanie</title>
+<link rel="stylesheet" href="wspolne.css">
+<style>
+body{display:grid;place-items:center;padding:24px}
+.ekran{width:min(420px,100%);display:flex;flex-direction:column;gap:22px}
+.naglowek{display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center}
+h1{font-family:var(--serif);font-weight:500;font-size:27px;letter-spacing:1px;line-height:1.2}
+.podtytul{color:var(--mut);font-size:13.5px;max-width:34ch}
+form{padding:26px;display:flex;flex-direction:column;gap:16px}
+label{display:flex;flex-direction:column;gap:7px;font-size:12px;letter-spacing:1.6px;
+  text-transform:uppercase;color:var(--mut)}
+.komunikat{display:none;padding:11px 13px;border-radius:10px;font-size:13.5px;
+  border:1px solid var(--zle);background:var(--zlesoft);color:#F3C9BB}
+.komunikat.widac{display:block}
+.stopka{text-align:center;font-size:12.5px;color:var(--mut);line-height:1.8}
+.stopka a{text-decoration:none;border-bottom:1px solid var(--line2)}
+.demo{padding:14px 16px;font-size:12px;color:var(--mut);line-height:1.9}
+.demo b{color:var(--dim);font-weight:500}
+.demo code{color:var(--gold);font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="ekran">
+
+  <div class="naglowek">
+    <div class="marka">
+      <span class="znak"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3c1.6 3 1.6 6.4 0 9.4C10.4 9.4 10.4 6 12 3z"/>
+        <path d="M12 12.4c-2.2-2-5-2.6-7.6-1.8.9 3.6 4 5.8 7.6 6.4 3.6-.6 6.7-2.8 7.6-6.4-2.6-.8-5.4-.2-7.6 1.8z"/>
+        <path d="M4 18c2.4 1.6 5.1 2.4 8 2.4s5.6-.8 8-2.4"/></svg></span>
+      <span><b>ASTERA</b><span>Coach · Szkoła Maliwan</span></span>
+    </div>
+    <h1>Zaloguj się</h1>
+    <p class="podtytul">Platforma szkoleniowa jest zamknięta. Konto zakłada administrator szkoły.</p>
+  </div>
+
+  <form class="karta" id="formularz" autocomplete="on">
+    <div class="komunikat" id="komunikat" role="alert"></div>
+    <label>Adres e-mail
+      <input class="pole" type="email" name="email" id="email" required
+             autocomplete="username" placeholder="imie@thaimaliwan.pl">
+    </label>
+    <label>Hasło
+      <input class="pole" type="password" name="haslo" id="haslo" required
+             autocomplete="current-password" placeholder="••••••••">
+    </label>
+    <button class="przycisk glowny" type="submit" id="wyslij" style="margin-top:4px">Zaloguj się</button>
+  </form>
+
+  <p class="stopka">
+    Nie pamiętasz hasła? <a href="#" id="reset">Ustaw nowe</a><br>
+    Nie masz konta? Napisz do nas: <a href="mailto:akademia@thaimaliwan.pl">akademia@thaimaliwan.pl</a>
+  </p>
+
+  <div class="karta demo">
+    <b>Konta demonstracyjne (tylko lokalnie)</b><br>
+    <code>norbert@thaimaliwan.pl</code> / <code>demo-norbert</code> — administrator<br>
+    <code>maliwan@thaimaliwan.pl</code> / <code>demo-maliwan</code> — instruktor<br>
+    <code>ania@przyklad.pl</code> / <code>demo-ania</code> — kursantka, kurs podstawowy<br>
+    <code>piotr@przyklad.pl</code> / <code>demo-piotr</code> — kursant, kurs mistrzowski
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function pokazBlad(t){ const k=$('komunikat'); k.textContent=t; k.classList.add('widac'); }
+
+$('formularz').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('komunikat').classList.remove('widac');
+  $('wyslij').disabled = true; $('wyslij').textContent = 'Sprawdzam…';
+  try{
+    const r = await fetch('/api/logowanie', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: $('email').value.trim(), haslo: $('haslo').value })
+    });
+    const d = await r.json();
+    if (!r.ok) { pokazBlad(d.blad || 'Nie udało się zalogować.'); return; }
+    location.href = 'app.html';
+  } catch { pokazBlad('Brak połączenia z serwerem. Spróbuj jeszcze raz.'); }
+  finally { $('wyslij').disabled = false; $('wyslij').textContent = 'Zaloguj się'; }
+});
+
+$('reset').addEventListener('click', e => {
+  e.preventDefault();
+  pokazBlad('Odzyskiwanie hasła obsługuje Supabase Auth — wyśle link na Twój adres. '
+          + 'W wersji lokalnej hasło zmienia administrator.');
+});
+
+// jeśli sesja jest ważna, nie pokazuj logowania
+fetch('/api/ja').then(r => { if (r.ok) location.href = 'app.html'; }).catch(()=>{});
+</script>
+</body>
+</html>

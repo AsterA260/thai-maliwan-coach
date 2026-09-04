@@ -1,0 +1,69 @@
+/* AsterA Coach — wspólna warstwa wizualna (paleta ze strony szkoły) */
+:root{
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --bg:#241D15; --bg2:#2F271D; --panel:rgba(58,48,40,.55); --panel2:rgba(40,33,27,.80);
+  --ink:#F6EFE2; --dim:#D3C4A8; --mut:#9C8B70;
+  --gold:#E0BC77; --goldsoft:rgba(224,188,119,.12);
+  --line:rgba(224,188,119,.32); --line2:rgba(224,188,119,.15);
+  --ok:#8FB39A; --oksoft:rgba(143,179,154,.14);
+  --zle:#E08B70; --zlesoft:rgba(224,139,112,.14);
+  --cien:0 1px 2px rgba(0,0,0,.3),0 12px 34px rgba(0,0,0,.26);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:var(--sans);color:var(--ink);font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(1100px 720px at 18% 0%,rgba(224,188,119,.09),transparent 62%),
+    radial-gradient(900px 700px at 88% 24%,rgba(196,117,107,.07),transparent 62%),
+    var(--bg);
+  background-attachment:fixed}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+a{color:var(--gold)}
+
+.marka{display:flex;align-items:center;gap:11px}
+.marka .znak{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--gold);flex:none}
+.marka b{font-family:var(--serif);font-size:16px;font-weight:600;letter-spacing:4px;
+  display:block;color:var(--gold)}
+.marka span{font-size:9px;letter-spacing:2.4px;color:var(--mut);text-transform:uppercase;display:block}
+
+.karta{border:1px solid var(--line2);border-radius:14px;background:var(--panel2);
+  backdrop-filter:blur(24px) saturate(1.25);box-shadow:var(--cien)}
+.etykieta{font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:var(--gold);font-weight:600}
+.cicho{color:var(--mut);font-size:13px}
+
+.plakietka{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:1.6px;
+  text-transform:uppercase;padding:3px 10px;border-radius:20px;
+  border:1px solid var(--line2);color:var(--mut);background:var(--bg2);white-space:nowrap}
+.plakietka.admin{color:var(--gold);border-color:var(--line);background:var(--goldsoft)}
+.plakietka.instruktor{color:var(--ok);border-color:var(--ok);background:var(--oksoft)}
+.plakietka.kursant{color:var(--dim)}
+.plakietka.ukryty{color:var(--zle);border-color:var(--zle);background:var(--zlesoft)}
+.plakietka.zrobione{color:var(--ok);border-color:var(--ok);background:var(--oksoft)}
+
+.przycisk{border:1px solid var(--line);border-radius:10px;padding:9px 16px;color:var(--gold);
+  background:var(--goldsoft);font-size:13px;letter-spacing:.3px;transition:.15s}
+.przycisk:hover{background:rgba(224,188,119,.2)}
+.przycisk.glowny{background:var(--gold);color:var(--bg);font-weight:600;border-color:var(--gold)}
+.przycisk.glowny:hover{filter:brightness(1.08)}
+.przycisk.cichy{color:var(--mut);border-color:var(--line2);background:none}
+.przycisk.cichy:hover{color:var(--gold);border-color:var(--line)}
+.przycisk:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+.pole{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--line2);
+  background:rgba(0,0,0,.22);color:var(--ink)}
+.pole:focus{outline:none;border-color:var(--line);box-shadow:inset 0 0 0 1px var(--line2)}
+.pole::placeholder{color:var(--mut)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+  color:var(--mut);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line2)}
+td{padding:11px 12px;border-bottom:1px solid rgba(224,188,119,.07);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.przewijak{overflow-x:auto}
+
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

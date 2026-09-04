@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AsterA Coach</title>
+<link rel="stylesheet" href="wspolne.css">
+<style>
+body{display:flex;flex-direction:column;min-height:100vh;overflow-x:hidden}
+
+/* ── pasek górny ── */
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;
+  padding:12px 22px;border-bottom:1px solid var(--line2);background:var(--panel2);
+  backdrop-filter:blur(26px) saturate(1.3)}
+header nav{display:flex;gap:3px;flex:1;flex-wrap:wrap}
+header nav button{padding:7px 14px;border-radius:10px;color:var(--mut);font-size:13px}
+header nav button.wybrany{color:var(--gold);background:var(--goldsoft)}
+.kto{display:flex;align-items:center;gap:10px;flex:none}
+.kto .imie{font-size:13px;color:var(--dim)}
+
+main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
+  display:flex;flex-direction:column;gap:22px}
+.tytul{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.tytul h1{font-family:var(--serif);font-weight:500;font-size:clamp(22px,3.4vw,30px);
+  letter-spacing:.5px;text-wrap:balance}
+.widok{display:none;flex-direction:column;gap:22px}
+.widok.aktywny{display:flex}
+.blok{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.rzad{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.siatka{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+
+/* ── kafle kursów ── */
+.kurs{padding:18px 20px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:.15s}
+.kurs:hover{border-color:var(--line)}
+.kurs h3{font-family:var(--serif);font-size:19px;font-weight:500;line-height:1.25}
+.kurs .fakty{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── ORBITA (laptop i tablet) ── */
+.orbita{position:relative;width:min(560px,86vw);aspect-ratio:1;margin:8px auto 0}
+.pierscien{position:absolute;inset:3%;border-radius:50%;border:1px solid var(--line2)}
+.pierscien.wewn{inset:29%}
+.kafel{position:absolute;width:20%;aspect-ratio:3/4;transform:translate(-50%,-50%);
+  border-radius:44px 44px 12px 12px;border:1px solid var(--line2);background:var(--bg2);
+  cursor:pointer;overflow:hidden;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;padding:8px;text-align:center;transition:.2s}
+.kafel:hover{border-color:var(--line)}
+.kafel.teraz{border-color:var(--gold);transform:translate(-50%,-50%) scale(1.09);z-index:5;
+  box-shadow:0 0 0 1px var(--gold),0 18px 44px rgba(0,0,0,.45)}
+.kafel.gotowy{border-color:var(--ok)}
+.kafel .ikonka{font-size:19px;line-height:1}
+.kafel .nr{font-size:8px;letter-spacing:1.6px;color:var(--mut)}
+.kafel .co{font-family:var(--serif);font-size:11px;line-height:1.2;color:var(--dim)}
+.medalion{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:38%;aspect-ratio:1;border-radius:50%;background:var(--panel2);
+  backdrop-filter:blur(14px);border:1px solid var(--line);display:grid;place-items:center;
+  text-align:center;padding:7%;z-index:4}
+.medalion .nr{font-size:9px;letter-spacing:2.6px;color:var(--gold)}
+.medalion h2{font-family:var(--serif);font-size:16px;font-weight:500;margin:7px 0;line-height:1.2}
+.medalion p{font-size:11px;color:var(--mut);line-height:1.5}
+
+/* ── LISTA (telefon) ── */
+.lista{display:none;flex-direction:column;gap:9px}
+.pozycja{display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:12px;
+  border:1px solid var(--line2);background:var(--panel2);cursor:pointer;text-align:left;width:100%}
+.pozycja:hover,.pozycja.teraz{border-color:var(--gold)}
+.pozycja.gotowy{border-color:var(--ok)}
+.pozycja .ikonka{font-size:24px;flex:none;width:34px;text-align:center}
+.pozycja .srodek{flex:1;min-width:0}
+.pozycja .czas{font-size:11px;letter-spacing:1.6px;color:var(--mut)}
+.pozycja .co{font-family:var(--serif);font-size:17px;line-height:1.25;margin-top:2px}
+.pozycja .znacznik{flex:none;font-size:18px;color:var(--ok)}
+
+@media(max-width:720px){
+  .orbita{display:none}
+  .lista{display:flex}
+  main{padding:18px 14px 70px}
+  header{padding:10px 14px;gap:10px;flex-wrap:wrap}
+  header nav{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  header nav::-webkit-scrollbar{display:none}
+  header nav button{flex:none;white-space:nowrap}
+  .kto{margin-left:auto}
+  .blok{padding:16px}
+}
+
+/* ── panel etapu ── */
+.szuflada{position:fixed;inset:0;z-index:40;display:none;background:rgba(20,15,11,.72);
+  backdrop-filter:blur(6px);padding:24px;overflow-y:auto}
+.szuflada.otwarta{display:block}
+.szuflada .tresc{width:min(680px,100%);margin:0 auto;padding:26px;display:flex;
+  flex-direction:column;gap:18px}
+.szuflada h2{font-family:var(--serif);font-size:24px;font-weight:500;line-height:1.2}
+.wiersz{display:flex;flex-direction:column;gap:5px}
+.wiersz .co{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
+.wiersz .tekst{color:var(--dim);font-size:14.5px}
+.cytat{border-left:2px solid var(--gold);padding-left:14px;font-style:italic;color:var(--ink)}
+.ostrzezenie{border-left:2px solid var(--zle);padding-left:14px;color:#F0CFC3}
+
+.pusto{padding:34px 20px;text-align:center;color:var(--mut);font-size:14px}
+.pasek{height:5px;border-radius:3px;background:rgba(224,188,119,.14);overflow:hidden;min-width:90px}
+.pasek i{display:block;height:100%;background:var(--ok);border-radius:3px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marka">
+    <span class="znak"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3c1.6 3 1.6 6.4 0 9.4C10.4 9.4 10.4 6 12 3z"/>
+      <path d="M12 12.4c-2.2-2-5-2.6-7.6-1.8.9 3.6 4 5.8 7.6 6.4 3.6-.6 6.7-2.8 7.6-6.4-2.6-.8-5.4-.2-7.6 1.8z"/>
+      <path d="M4 18c2.4 1.6 5.1 2.4 8 2.4s5.6-.8 8-2.4"/></svg></span>
+    <span><b>ASTERA</b><span>Coach</span></span>
+  </div>
+  <nav id="menu"></nav>
+  <div class="kto">
+    <span class="imie" id="imie"></span>
+    <span class="plakietka" id="rola"></span>
+    <button class="przycisk cichy" id="wyloguj">Wyloguj</button>
+  </div>
+</header>
+
+<main>
+  <!-- ══ SZKOLENIE ══ -->
+  <section class="widok" id="w-szkolenie">
+    <div class="tytul"><h1 id="tytulKursu">Szkolenie</h1><span class="cicho" id="podtytulKursu"></span></div>
+    <div class="rzad" id="wyborKursu"></div>
+    <div class="orbita" id="orbita"></div>
+    <div class="lista" id="lista"></div>
+    <div class="karta blok" id="materialyBlok">
+      <div class="etykieta">Materiały</div>
+      <div id="materialy"></div>
+    </div>
+  </section>
+
+  <!-- ══ KURSANCI (instruktor / admin) ══ -->
+  <section class="widok" id="w-kursanci">
+    <div class="tytul"><h1>Kursanci i postępy</h1></div>
+    <div class="karta przewijak"><table id="tabKursanci"></table></div>
+  </section>
+
+  <!-- ══ MATERIAŁY (instruktor / admin) ══ -->
+  <section class="widok" id="w-materialy">
+    <div class="tytul"><h1>Materiały</h1><span class="cicho">Kursant zobaczy materiał dopiero po opublikowaniu</span></div>
+    <div class="karta blok">
+      <div class="etykieta">Dodaj materiał</div>
+      <div class="rzad">
+        <select class="pole" id="mKurs" style="max-width:230px"></select>
+        <select class="pole" id="mTyp" style="max-width:130px">
+          <option value="pdf">PDF</option><option value="zdjecie">zdjęcie</option>
+          <option value="wideo">wideo</option><option value="audio">audio</option>
+          <option value="inny">inny</option>
+        </select>
+        <input class="pole" id="mNazwa" placeholder="Nazwa materiału" style="max-width:280px">
+        <button class="przycisk glowny" id="mDodaj">Dodaj</button>
+      </div>
+      <p class="cicho">Plik trafia do prywatnego magazynu pod kluczem <code>kurs/&lt;id&gt;/&lt;typ&gt;/…</code>.
+      Adresu nie da się zgadnąć ani otworzyć bez uprawnień.</p>
+    </div>
+    <div class="karta przewijak"><table id="tabMaterialy"></table></div>
+  </section>
+
+  <!-- ══ PYTANIA ══ -->
+  <section class="widok" id="w-pytania">
+    <div class="tytul"><h1>Pytania</h1></div>
+    <div class="karta blok" id="zadajBlok">
+      <div class="etykieta">Zapytaj Maliwan</div>
+      <textarea class="pole" id="trescPytania" rows="3" placeholder="O co chcesz zapytać?"></textarea>
+      <div class="rzad"><button class="przycisk glowny" id="wyslijPytanie">Wyślij pytanie</button></div>
+    </div>
+    <div class="karta przewijak"><table id="tabPytania"></table></div>
+  </section>
+
+  <!-- ══ KONTA (admin) ══ -->
+  <section class="widok" id="w-konta">
+    <div class="tytul"><h1>Konta i role</h1><span class="cicho">Rejestracja publiczna jest wyłączona</span></div>
+    <div class="karta przewijak"><table id="tabKonta"></table></div>
+  </section>
+
+  <!-- ══ PRZYPISANIA (admin) ══ -->
+  <section class="widok" id="w-przypisania">
+    <div class="tytul"><h1>Przypisania do kursów</h1></div>
+    <div class="karta blok">
+      <div class="rzad">
+        <select class="pole" id="pKursant" style="max-width:250px"></select>
+        <select class="pole" id="pKurs" style="max-width:250px"></select>
+        <button class="przycisk glowny" id="pDodaj">Przypisz</button>
+      </div>
+    </div>
+    <div class="karta przewijak"><table id="tabPrzypisania"></table></div>
+  </section>
+</main>
+
+<div class="szuflada" id="szuflada"><div class="karta tresc" id="szufladaTresc"></div></div>
+
+<script>
+const $  = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const api = async (sciezka, dane) => {
+  const o = dane ? { method:'POST', headers:{'Content-Type':'application/json'},
+                     body: JSON.stringify(dane) } : {};
+  const r = await fetch(sciezka, o);
+  if (r.status === 401) { location.href = 'index.html'; throw new Error('sesja'); }
+  return r.json();
+};
+
+let JA = null, KURSY = [], KURS = null, DANE = { lekcje:[], etapy:[], materialy:[], postepy:[] },
+    AKTYWNY = 0, KONTA = [];
+
+/* ══ MENU ZALEŻNE OD ROLI ══════════════════════════════════════════
+   To jest wyłącznie wygoda. O tym, co użytkownik naprawdę zobaczy,
+   decydują polityki w bazie — ręczne wpisanie #konta niczego nie otwiera. */
+const ZAKLADKI = {
+  admin      : [['szkolenie','Szkolenie'],['kursanci','Kursanci'],['materialy','Materiały'],
+                ['pytania','Pytania'],['konta','Konta'],['przypisania','Przypisania']],
+  instruktor : [['szkolenie','Szkolenie'],['kursanci','Kursanci'],['materialy','Materiały'],
+                ['pytania','Pytania']],
+  kursant    : [['szkolenie','Szkolenie'],['pytania','Pytania']],
+};
+
+function pokaz(nazwa){
+  const wolno = ZAKLADKI[JA.rola].some(z => z[0] === nazwa);
+  if (!wolno) nazwa = 'szkolenie';
+  document.querySelectorAll('.widok').forEach(w => w.classList.remove('aktywny'));
+  $('w-' + nazwa).classList.add('aktywny');
+  document.querySelectorAll('#menu button').forEach(b =>
+    b.classList.toggle('wybrany', b.dataset.w === nazwa));
+  location.hash = nazwa;
+  if (nazwa === 'kursanci')    rysujKursantow();
+  if (nazwa === 'materialy')   rysujMaterialy();
+  if (nazwa === 'pytania')     rysujPytania();
+  if (nazwa === 'konta')       rysujKonta();
+  if (nazwa === 'przypisania') rysujPrzypisania();
+}
+
+/* ══ SZKOLENIE ═══════════════════════════════════════════════════ */
+function rysujWyborKursu(){
+  $('wyborKursu').innerHTML = KURSY.map(k =>
+    `<button class="przycisk ${k.id===KURS?.id?'glowny':'cichy'}" data-kurs="${k.id}">
+       ${esc(k.nazwa_pl)}</button>`).join('') || '';
+  $('wyborKursu').querySelectorAll('[data-kurs]').forEach(b =>
+    b.onclick = () => wczytajKurs(KURSY.find(k => k.id === b.dataset.kurs)));
+}
+
+async function wczytajKurs(k){
+  KURS = k; AKTYWNY = 0;
+  if (!k){ $('tytulKursu').textContent = 'Brak przypisanego szkolenia';
+           $('podtytulKursu').textContent = '';
+           $('orbita').innerHTML = ''; $('lista').innerHTML = '';
+           $('materialyBlok').style.display = 'none'; return; }
+  $('materialyBlok').style.display = '';
+  DANE = await api('/api/kurs?id=' + k.id);
+  $('tytulKursu').textContent = k.nazwa_pl;
+  $('podtytulKursu').textContent =
+    `${k.dni} dni · ${k.godzin} godzin praktyki · ${DANE.etapy.length} etapów`;
+  rysujWyborKursu(); rysujEtapy(); rysujMaterialyKursanta();
+}
+
+const stanEtapu = id => (DANE.postepy.find(p => p.etap_id === id)?.status) || 'nierozpoczety';
+
+function rysujEtapy(){
+  const e = DANE.etapy, n = e.length;
+  if (!n){ $('orbita').innerHTML = '<div class="pusto">Ten kurs nie ma jeszcze opublikowanych etapów.</div>';
+           $('lista').innerHTML = ''; return; }
+
+  // ORBITA — laptop i tablet
+  const R = 38;
+  $('orbita').innerHTML = '<div class="pierscien"></div><div class="pierscien wewn"></div>' +
+    e.map((x,i) => {
+      const a = (-90 + i*360/n) * Math.PI/180;
+      const gotowy = stanEtapu(x.id) === 'zrobione';
+      return `<button class="kafel ${i===AKTYWNY?'teraz':''} ${gotowy?'gotowy':''}"
+        style="left:${50+R*Math.cos(a)}%;top:${50+R*Math.sin(a)}%" data-i="${i}">
+        <span class="ikonka">${esc(x.ikona||'•')}</span>
+        <span class="nr">${String(i+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</span>
+        <span class="co">${esc(x.nazwa_pl)}</span></button>`;
+    }).join('') +
+    (() => { const x = e[AKTYWNY]; return `<div class="medalion">
+      <div><div class="nr">${esc(x.godzina||'')}</div>
+      <h2>${esc(x.nazwa_pl)}</h2>
+      <p>${esc((x.cel_pl||'').slice(0,90))}</p></div></div>`; })();
+
+  // LISTA — telefon
+  $('lista').innerHTML = e.map((x,i) => {
+    const gotowy = stanEtapu(x.id) === 'zrobione';
+    return `<button class="pozycja ${i===AKTYWNY?'teraz':''} ${gotowy?'gotowy':''}" data-i="${i}">
+      <span class="ikonka">${esc(x.ikona||'•')}</span>
+      <span class="srodek">
+        <span class="czas">${String(i+1).padStart(2,'0')} · ${esc(x.godzina||'')} · ${x.czas_min||'–'} min</span>
+        <span class="co">${esc(x.nazwa_pl)}</span></span>
+      <span class="znacznik">${gotowy ? '✓' : ''}</span></button>`;
+  }).join('');
+
+  document.querySelectorAll('[data-i]').forEach(b =>
+    b.onclick = () => { AKTYWNY = +b.dataset.i; rysujEtapy(); otworzEtap(e[AKTYWNY]); });
+}
+
+function otworzEtap(x){
+  const gotowy = stanEtapu(x.id) === 'zrobione';
+  const w = (co, tekst, klasa='') => tekst
+    ? `<div class="wiersz"><span class="co">${co}</span>
+       <span class="tekst ${klasa}">${esc(tekst)}</span></div>` : '';
+  const pyt = (x.pytania||[]).length
+    ? `<div class="wiersz"><span class="co">Pytania kontrolne</span><ul class="tekst"
+       style="padding-left:18px">${x.pytania.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>` : '';
+  $('szufladaTresc').innerHTML = `
+    <div class="rzad" style="justify-content:space-between">
+      <span class="plakietka">${esc(x.godzina||'')} · ${x.czas_min||'–'} min</span>
+      <button class="przycisk cichy" id="zamknij">Zamknij</button></div>
+    <h2>${esc(x.ikona||'')} ${esc(x.nazwa_pl)}</h2>
+    ${w('Cel', x.cel_pl)}
+    ${w('Agent mówi', x.agent_mowi_pl, 'cytat')}
+    ${w('Maliwan pokazuje', x.pokazuje_pl)}
+    ${w('Kursanci robią', x.kursanci_robia_pl)}
+    ${w('Na co uważać', x.uwaga_pl, 'ostrzezenie')}
+    ${w('Podsumowanie', x.podsumowanie_pl)}
+    ${pyt}
+    <div class="rzad">
+      ${JA.rola === 'kursant'
+        ? `<button class="przycisk ${gotowy?'cichy':'glowny'}" id="oznacz">
+             ${gotowy ? 'Cofnij oznaczenie' : 'Oznacz jako zrobione'}</button>` : ''}
+    </div>`;
+  $('szuflada').classList.add('otwarta');
+  $('zamknij').onclick = () => $('szuflada').classList.remove('otwarta');
+  const o = $('oznacz');
+  if (o) o.onclick = async () => {
+    const nowy = gotowy ? 'w_trakcie' : 'zrobione';
+    const p = await api('/api/postep', { etap_id: x.id, status: nowy });
+    DANE.postepy = DANE.postepy.filter(q => q.etap_id !== x.id).concat(p ? [p] : []);
+    rysujEtapy(); otworzEtap(x);
+  };
+}
+$('szuflada').addEventListener('click', e => {
+  if (e.target === $('szuflada')) $('szuflada').classList.remove('otwarta'); });
+
+function rysujMaterialyKursanta(){
+  const m = DANE.materialy.filter(x => JA.rola === 'kursant' ? x.opublikowany : true);
+  $('materialy').innerHTML = m.length
+    ? `<div class="siatka">${m.map(x => `<div class="karta blok" style="gap:8px">
+         <div class="rzad"><span class="plakietka">${esc(x.typ)}</span>
+         ${x.opublikowany ? '' : '<span class="plakietka ukryty">nieopublikowany</span>'}</div>
+         <b style="font-weight:500">${esc(x.nazwa_pl)}</b>
+         <span class="cicho">${esc(x.opis||'')}</span></div>`).join('')}</div>`
+    : '<div class="pusto">Do tego kursu nie ma jeszcze materiałów.</div>';
+}
+
+/* ══ KURSANCI ════════════════════════════════════════════════════ */
+async function rysujKursantow(){
+  const k = await api('/api/kursanci');
+  $('tabKursanci').innerHTML = k.length ? `
+    <tr><th>Kursant</th><th>E-mail</th><th>Kurs</th><th>Postęp</th></tr>` +
+    k.map(x => { const proc = x.etapow ? Math.round(100*x.zrobione/x.etapow) : 0;
+      return `<tr><td>${esc(x.imie)}</td><td class="cicho">${esc(x.email)}</td>
+      <td>${esc(x.kurs)}</td>
+      <td><div class="rzad"><div class="pasek"><i style="width:${proc}%"></i></div>
+      <span class="cicho">${x.zrobione} / ${x.etapow}</span></div></td></tr>`; }).join('')
+    : '<tr><td class="pusto">Nie masz jeszcze przypisanych kursantów.</td></tr>';
+}
+
+/* ══ MATERIAŁY ═══════════════════════════════════════════════════ */
+async function rysujMaterialy(){
+  $('mKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  const wsz = [];
+  for (const k of KURSY){
+    const d = await api('/api/kurs?id=' + k.id);
+    d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa_pl }));
+  }
+  $('tabMaterialy').innerHTML = wsz.length ? `
+    <tr><th>Materiał</th><th>Kurs</th><th>Typ</th><th>Stan</th><th></th></tr>` +
+    wsz.map(m => `<tr>
+      <td>${esc(m.nazwa_pl)}<div class="cicho" style="font-size:11px">${esc(m.sciezka)}</div></td>
+      <td class="cicho">${esc(m.kurs)}</td><td><span class="plakietka">${esc(m.typ)}</span></td>
+      <td>${m.opublikowany ? '<span class="plakietka zrobione">opublikowany</span>'
+                           : '<span class="plakietka ukryty">ukryty</span>'}</td>
+      <td><button class="przycisk cichy" data-pub="${m.id}" data-stan="${m.opublikowany}">
+        ${m.opublikowany ? 'Ukryj' : 'Opublikuj'}</button></td></tr>`).join('')
+    : '<tr><td class="pusto">Brak materiałów.</td></tr>';
+  $('tabMaterialy').querySelectorAll('[data-pub]').forEach(b => b.onclick = async () => {
+    await api('/api/material/publikuj', { id: b.dataset.pub, opublikowany: b.dataset.stan !== 'true' });
+    rysujMaterialy();
+  });
+}
+$('mDodaj').onclick = async () => {
+  const nazwa = $('mNazwa').value.trim();
+  if (!nazwa) return;
+  const r = await api('/api/material',
+    { kurs_id: $('mKurs').value, typ: $('mTyp').value, nazwa_pl: nazwa, opublikowany: false });
+  if (r.blad) { alert(r.blad); return; }
+  $('mNazwa').value = ''; rysujMaterialy();
+};
+
+/* ══ PYTANIA ═════════════════════════════════════════════════════ */
+async function rysujPytania(){
+  $('zadajBlok').style.display = JA.rola === 'kursant' ? '' : 'none';
+  const p = await api('/api/pytania');
+  $('tabPytania').innerHTML = p.length ? `
+    <tr><th>Kto</th><th>Kurs</th><th>Pytanie</th><th>Stan</th></tr>` +
+    p.map(x => `<tr><td>${esc(x.kursant)}</td><td class="cicho">${esc(x.kurs)}</td>
+      <td>${esc(x.tresc)}</td>
+      <td><span class="plakietka">${esc(x.status)}</span></td></tr>`).join('')
+    : '<tr><td class="pusto">Nie ma jeszcze żadnych pytań.</td></tr>';
+}
+$('wyslijPytanie').onclick = async () => {
+  const t = $('trescPytania').value.trim();
+  if (!t || !KURS) return;
+  const r = await api('/api/pytanie', { kurs_id: KURS.id, tresc: t });
+  if (r.blad) { alert(r.blad); return; }
+  $('trescPytania').value = ''; rysujPytania();
+};
+
+/* ══ KONTA (admin) ═══════════════════════════════════════════════ */
+async function rysujKonta(){
+  KONTA = await api('/api/konta');
+  $('tabKonta').innerHTML = `
+    <tr><th>Imię</th><th>E-mail</th><th>Rola</th><th>Stan</th><th></th></tr>` +
+    KONTA.map(k => `<tr>
+      <td>${esc(k.imie)}</td><td class="cicho">${esc(k.email)}</td>
+      <td><select class="pole" data-rola="${k.id}" style="padding:5px 8px;max-width:140px">
+        ${['admin','instruktor','kursant'].map(r =>
+          `<option value="${r}" ${r===k.rola?'selected':''}>${r}</option>`).join('')}
+      </select></td>
+      <td>${k.aktywne ? '<span class="plakietka zrobione">aktywne</span>'
+                      : '<span class="plakietka ukryty">wyłączone</span>'}</td>
+      <td><button class="przycisk cichy" data-akt="${k.id}" data-stan="${k.aktywne}">
+        ${k.aktywne ? 'Wyłącz' : 'Włącz'}</button></td></tr>`).join('');
+  $('tabKonta').querySelectorAll('[data-rola]').forEach(s => s.onchange = async () => {
+    const r = await api('/api/konto/rola', { id: s.dataset.rola, rola: s.value });
+    if (r.blad) alert(r.blad); rysujKonta();
+  });
+  $('tabKonta').querySelectorAll('[data-akt]').forEach(b => b.onclick = async () => {
+    const r = await api('/api/konto/aktywne', { id: b.dataset.akt, aktywne: b.dataset.stan !== 'true' });
+    if (r.blad) alert(r.blad); rysujKonta();
+  });
+}
+
+/* ══ PRZYPISANIA (admin) ═════════════════════════════════════════ */
+async function rysujPrzypisania(){
+  if (!KONTA.length) KONTA = await api('/api/konta');
+  $('pKursant').innerHTML = KONTA.filter(k => k.rola === 'kursant')
+    .map(k => `<option value="${k.id}">${esc(k.imie)} — ${esc(k.email)}</option>`).join('');
+  $('pKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  const k = await api('/api/kursanci');
+  $('tabPrzypisania').innerHTML = k.length ? `
+    <tr><th>Kursant</th><th>Kurs</th><th></th></tr>` +
+    k.map(x => `<tr><td>${esc(x.imie)}</td><td>${esc(x.kurs)}</td>
+      <td><button class="przycisk cichy" data-odepnij="${x.id}" data-kurs="${x.kurs_id}">
+        Odepnij</button></td></tr>`).join('')
+    : '<tr><td class="pusto">Nikt nie jest jeszcze przypisany.</td></tr>';
+  $('tabPrzypisania').querySelectorAll('[data-odepnij]').forEach(b => b.onclick = async () => {
+    await api('/api/odepnij', { kursant_id: b.dataset.odepnij, kurs_id: b.dataset.kurs });
+    rysujPrzypisania();
+  });
+}
+$('pDodaj').onclick = async () => {
+  const r = await api('/api/przypisz', { kursant_id: $('pKursant').value, kurs_id: $('pKurs').value });
+  if (r.blad) alert(r.blad); rysujPrzypisania();
+};
+
+/* ══ WYLOGOWANIE ═════════════════════════════════════════════════ */
+$('wyloguj').onclick = async () => {
+  await fetch('/api/wylogowanie', { method:'POST' });
+  location.href = 'index.html';
+};
+
+/* ══ START ═══════════════════════════════════════════════════════ */
+(async () => {
+  const d = await api('/api/ja');
+  JA = d.profil;
+  $('imie').textContent = JA.imie;
+  $('rola').textContent = JA.rola;
+  $('rola').className = 'plakietka ' + JA.rola;
+  $('menu').innerHTML = ZAKLADKI[JA.rola]
+    .map(([k,n]) => `<button data-w="${k}">${n}</button>`).join('');
+  $('menu').querySelectorAll('button').forEach(b => b.onclick = () => pokaz(b.dataset.w));
+
+  KURSY = await api('/api/kursy');
+  await wczytajKurs(KURSY[0] || null);
+  pokaz((location.hash || '#szkolenie').slice(1));
+})();
+</script>
+</body>
+</html>
