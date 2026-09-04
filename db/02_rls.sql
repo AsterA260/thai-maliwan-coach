@@ -268,3 +268,17 @@ grant execute on function public.zapisany_na_kurs(uuid)     to authenticated;
 grant execute on function public.moge_czytac_kurs(uuid)     to authenticated;
 grant execute on function public.kurs_etapu(uuid)           to authenticated;
 grant execute on function public.kurs_ze_sciezki(text)      to authenticated;
+
+-- NIE nadajemy prawa wykonania:
+--   ustanow_pierwszego_admina(text)  — droga inicjalizacyjna, tylko z SQL Editora
+--   kontekst_inicjalizacji()         — używana wyłącznie przez wyzwalacz
+--   zablokuj_licznik_adminow(), ilu_innych_aktywnych_adminow(uuid)
+--   chron_profil(), chron_pytanie(), sprawdz_postep(), sprawdz_pytanie(),
+--   obsluz_nowego_uzytkownika()      — wywoływane z wnętrza bazy
+-- Blokuje je `revoke all on all functions` wyżej. Gdyby ktoś kiedyś
+-- dopisał tu grant na `ustanow_pierwszego_admina`, powstałaby publiczna
+-- droga podniesienia roli. Pilnuje tego test bazy 20.
+revoke all on function public.ustanow_pierwszego_admina(text)
+  from public, anon, authenticated, service_role;
+revoke all on function public.kontekst_inicjalizacji()
+  from public, anon, authenticated, service_role;

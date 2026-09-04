@@ -28,9 +28,14 @@
 
   if (!window.KONFIG || !window.KONFIG.SUPABASE_URL) return;   // tryb lokalny
 
+  // Nowe projekty (2026) dostają klucz `sb_publishable_…`; starsze mają
+  // `anon`. Supabase wygasza klucze legacy do końca 2026 roku, więc
+  // pierwszeństwo ma nowy, a stary zostaje jako awaryjny.
+  const KLUCZ = window.KONFIG.SUPABASE_PUBLISHABLE_KEY || window.KONFIG.SUPABASE_ANON_KEY;
+
   const sb = window.supabase.createClient(
     window.KONFIG.SUPABASE_URL,
-    window.KONFIG.SUPABASE_ANON_KEY,
+    KLUCZ,
     { auth: { persistSession: true, autoRefreshToken: true,
               detectSessionInUrl: true, flowType: 'implicit' } }
   );
@@ -119,6 +124,9 @@
     return (data || []).map(k => ({ ...k, instruktor: k.profile && k.profile.imie }));
   }
 
+  /** Cztery zapytania, cztery sprawdzenia błędu. Wcześniej błąd
+      któregokolwiek z nich wyglądał jak pusty kurs — a to zupełnie
+      co innego niż „kurs bez etapów". */
   async function kurs(kursId) {
     const [lekcje, etapy, materialy, postepy] = await Promise.all([
       sb.from('lekcja').select('*').eq('kurs_id', kursId).order('kolejnosc'),
@@ -128,6 +136,12 @@
       sb.from('postep').select('*, etap!inner(lekcja!inner(kurs_id))')
         .eq('etap.lekcja.kurs_id', kursId),
     ]);
+    const nieudane = [['lekcje', lekcje], ['etapy', etapy],
+                      ['materiały', materialy], ['postępy', postepy]]
+      .filter(([, w]) => w && w.error);
+    if (nieudane.length)
+      throw new Error('Nie udało się wczytać szkolenia (' +
+        nieudane.map(([n]) => n).join(', ') + '). Odśwież stronę.');
     return { lekcje: czyste(lekcje), etapy: czyste(etapy),
              materialy: czyste(materialy), postepy: czyste(postepy) };
   }
@@ -225,7 +239,12 @@
     try {
       return zmieniony(w, 'Nie masz uprawnień do tego kursu — plik nie został zapisany.');
     } catch (e) {
-      await sb.storage.from(BUCKET).remove([sciezka]);      // sprzątanie
+      // Sprzątanie może się nie udać. Wtedy w magazynie zostaje plik
+      // bez rekordu i trzeba o tym POWIEDZIEĆ, a nie zamilczeć.
+      const { error: bladSprzatania } = await sb.storage.from(BUCKET).remove([sciezka]);
+      if (bladSprzatania)
+        throw new Error(e.message + ' Uwaga: pliku nie udało się też usunąć z magazynu — ' +
+          `została sierota pod ścieżką ${sciezka}. Zgłoś to administratorowi.`);
       throw e;
     }
   }
@@ -239,11 +258,19 @@
     return wiersz;
   }
 
+  /** Rekord znika zawsze, plik czasem nie. Kasowanie w Storage bywa
+      odmówione przez politykę — i to musi być widać, bo inaczej
+      interfejs pokazuje pełny sukces, a plik dalej leży w buckecie. */
   async function usunMaterial(id) {
     const { data: m } = await sb.from('material').select('sciezka').eq('id', id).maybeSingle();
     const w = await sb.from('material').delete().eq('id', id).select();
     zmieniony(w, 'Nie masz uprawnień do tego materiału.');
-    if (m && m.sciezka) await sb.storage.from(BUCKET).remove([m.sciezka]);
+    if (m && m.sciezka) {
+      const { error } = await sb.storage.from(BUCKET).remove([m.sciezka]);
+      if (error)
+        throw new Error('Materiał usunięty z listy, ale samego pliku nie udało się ' +
+          `skasować z magazynu (${m.sciezka}). Zgłoś to administratorowi.`);
+    }
   }
 
   /* ── KONTA I PRZYPISANIA ───────────────────────────────────── */

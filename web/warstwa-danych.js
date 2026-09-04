@@ -25,7 +25,8 @@
   'use strict';
 
   const K = window.KONFIG || {};
-  const PRODUKCJA = !!(K.SUPABASE_URL && K.SUPABASE_ANON_KEY);
+  // Nowy klucz publiczny (`sb_publishable_…`) albo starszy `anon`.
+  const PRODUKCJA = !!(K.SUPABASE_URL && (K.SUPABASE_PUBLISHABLE_KEY || K.SUPABASE_ANON_KEY));
 
   /* ── nazwy funkcji, które MUSI mieć każda warstwa ─────────────── */
   const KONTRAKT = [

@@ -1,4 +1,38 @@
-node_modules/
+# UWAGA: git NIE obsługuje komentarzy na końcu linii z wzorcem.
+# `magazyn/   # komentarz` to wzorzec ze spacjami i hashem, który nie
+# pasuje do niczego. Każdy komentarz ma tu własną linię.
+
+# ── SEKRETY — nic z tego nigdy nie trafia do repozytorium ────────
 .env
-*.log
+.env.*
+!.env.example
+*.pem
+*.key
+sekrety*
+supabase/.temp/
+
+# ── zależności i wyniki budowania ────────────────────────────────
+node_modules/
+dist/
+build/
+
+# ── dane lokalne ─────────────────────────────────────────────────
+# magazyn/ to lokalny odpowiednik prywatnego bucketu Supabase
 magazyn/
+*.sqlite
+*.db
+
+# ── logi i pliki robocze ─────────────────────────────────────────
+*.log
+npm-debug.log*
+.cache/
+# zrzuty ekranu generowane do paczek
+zrzuty/
+
+# ── śmieci systemowe i edytorów ──────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

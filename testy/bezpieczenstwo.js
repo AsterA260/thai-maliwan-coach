@@ -326,6 +326,115 @@ function sprawdz(nr, opis, warunek, szczegol) {
     `druga transakcja czekała na blokadę: ${drugaCzeka} · wynik: „${wynikB}" · ` +
     `aktywnych adminów po wszystkim: ${n(poWyscigu)}`);
 
+  /* ═══ ROLE PRZY ZAPRASZANIU — sedno drugiego audytu ══════════════
+     Klucz `service_role` omija RLS, ale NIE jest zalogowanym adminem:
+     `auth.uid()` jest wtedy puste, więc wyzwalacz `chron_profil`
+     cofał nadaną rolę. Poniższe testy odtwarzają obie drogi na
+     PRAWDZIWEJ bazie — atrapa Supabase by tego nie wychwyciła,
+     bo nie uruchamia wyzwalaczy.                                   */
+
+  const nowyUzytkownik = async (email, imie) => {
+    const r = await db.query(
+      `insert into auth.users (email, raw_user_meta_data)
+       values ($1, jsonb_build_object('imie', $2::text)) returning id`, [email, imie]);
+    return r.rows[0].id;
+  };
+  const rolaKonta = async id =>
+    (await db.query(`select rola from public.profile where id=$1`, [id])).rows[0]?.rola;
+
+  /* ── 17. Zaproszenie instruktora kończy się profilem instruktor ── */
+  const idInstruktora = await nowyUzytkownik('nowy.instruktor@przyklad.pl', 'Nowa Instruktorka');
+  const rolaPoZalozeniu = await rolaKonta(idInstruktora);
+  // tak robi teraz Edge Function: zapis w kontekście zalogowanego admina
+  const nadanieI = await jakoTrwale(KTO.norbert,
+    `update public.profile set rola='instruktor' where id=$1 returning rola`, [idInstruktora]);
+  const rolaInstruktora = await rolaKonta(idInstruktora);
+  sprawdz(17, 'Zaproszenie instruktora kończy się profilem „instruktor"',
+    rolaPoZalozeniu === 'kursant' && nadanieI.ok && rolaInstruktora === 'instruktor',
+    `po założeniu konta: ${rolaPoZalozeniu} → po nadaniu roli przez admina: ${rolaInstruktora}`);
+
+  /* ── 18. Zaproszenie administratora kończy się profilem admin ─── */
+  const idAdmina = await nowyUzytkownik('nowy.admin@przyklad.pl', 'Nowy Admin');
+  await jakoTrwale(KTO.norbert,
+    `update public.profile set rola='admin' where id=$1`, [idAdmina]);
+  const rolaAdmina = await rolaKonta(idAdmina);
+
+  // ta sama zmiana kluczem serwisowym — czyli BEZ auth.uid() — musi się nie udać
+  const idKontrolny = await nowyUzytkownik('kontrola.roli@przyklad.pl', 'Kontrola');
+  await db.query(`update public.profile set rola='admin' where id=$1`, [idKontrolny]);
+  const rolaBezTozsamosci = await rolaKonta(idKontrolny);
+
+  sprawdz(18, 'Zaproszenie administratora kończy się profilem „admin"; bez tożsamości — nie',
+    rolaAdmina === 'admin' && rolaBezTozsamosci === 'kursant',
+    `przez admina: ${rolaAdmina} · bez auth.uid() (klucz serwisowy / SQL Editor): ` +
+    `${rolaBezTozsamosci} — po cichu cofnięte, dlatego istnieje ustanow_pierwszego_admina()`);
+
+  /* ── 19. Pierwszy administrator zgodnie z instrukcją ───────────── */
+  const gdyAdminIstnieje = await db.query(
+    `select public.ustanow_pierwszego_admina('ania@przyklad.pl')`).then(() => 'PRZESZŁO')
+    .catch(e => e.message.split('\n')[0]);
+
+  await db.query('begin');
+  await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+  await db.query(`update public.profile set rola='instruktor'
+                   where rola='admin' and aktywne`);          // stan sprzed pierwszego admina
+  await db.query(`select set_config('astera.inicjalizacja','nie',true)`);
+  const bezAdmina = (await db.query(
+    `select count(*)::int n from public.profile where rola='admin' and aktywne`)).rows[0].n;
+  await db.query(`select public.ustanow_pierwszego_admina('ania@przyklad.pl')`);
+  const poUstanowieniu = (await db.query(
+    `select rola from public.profile where email='ania@przyklad.pl'`)).rows[0].rola;
+  await db.query('rollback');
+
+  sprawdz(19, 'Pierwszego administratora da się utworzyć zgodnie z instrukcją — i tylko raz',
+    bezAdmina === 0 && poUstanowieniu === 'admin' &&
+    /Administrator juz istnieje/i.test(gdyAdminIstnieje),
+    `na czystym systemie: ${poUstanowieniu} · przy istniejącym adminie: „${gdyAdminIstnieje}"`);
+
+  /* ── 20. Kursant nie użyje tej drogi do podniesienia sobie roli ── */
+  const p1 = await jako(KTO.ania, `select public.ustanow_pierwszego_admina('ania@przyklad.pl')`);
+  const p2 = await jako(KTO.ania,
+    `update public.profile set rola='admin' where id = auth.uid() returning rola`);
+  // najtwardsza próba: kursant sam ustawia flagę inicjalizacji
+  await db.query('begin');
+  await db.query('set local role authenticated');
+  await db.query(`select set_config('request.jwt.claims', $1, true)`,
+    [JSON.stringify({ sub: KTO.ania, role: 'authenticated' })]);
+  let p3;
+  try {
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    p3 = (await db.query(
+      `update public.profile set rola='admin' where id = auth.uid() returning rola`)).rows[0]?.rola;
+  } catch (e) { p3 = 'odmowa: ' + e.message.split('\n')[0]; }
+  await db.query('rollback');
+
+  sprawdz(20, 'Kursant nie podniesie sobie roli — ani funkcją, ani flagą inicjalizacji',
+    !p1.ok && (p2.rows?.[0]?.rola ?? 'kursant') === 'kursant' && p3 !== 'admin',
+    `funkcja: ${p1.ok ? 'DOSTĘPNA — ŹLE' : 'brak uprawnień'} · zwykła zmiana: ` +
+    `${p2.rows?.[0]?.rola ?? '—'} · z własnoręczną flagą: ${p3}`);
+
+  /* ── 21. Instruktor nie podpisze odpowiedzi cudzym nazwiskiem ──── */
+  const [pytanieDoTestu] = (await jako(KTO.norbert,
+    `select id from public.pytanie where kurs_id=$1 limit 1`, [KURS.podstawowy])).rows || [];
+  const podszycie = pytanieDoTestu ? await jako(KTO.maliwan,
+    `update public.pytanie
+        set odpowiedz = 'Odpowiedź testowa',
+            odpowiedzial_id = $2,
+            odpowiedziano = timestamptz '2000-01-01'
+      where id = $1
+      returning odpowiedzial_id, odpowiedziano`, [pytanieDoTestu.id, KTO.norbert]) : { ok:false };
+  const w21 = podszycie.rows?.[0];
+  sprawdz(21, 'Autora i czas odpowiedzi stempluje baza — nie da się podpisać cudzym nazwiskiem',
+    !!w21 && w21.odpowiedzial_id === KTO.maliwan &&
+    new Date(w21.odpowiedziano).getFullYear() > 2020,
+    w21 ? `podała Norberta i rok 2000, baza zapisała: ${w21.odpowiedzial_id === KTO.maliwan
+      ? 'Maliwan' : w21.odpowiedzial_id}, ${new Date(w21.odpowiedziano).getFullYear()}`
+        : 'brak pytania do sprawdzenia');
+
+  /* sprzątanie po testach 17–18 */
+  await db.query(`delete from auth.users where email in
+    ('nowy.instruktor@przyklad.pl','nowy.admin@przyklad.pl','kontrola.roli@przyklad.pl')`);
+
   const zdane = wyniki.filter(w => w.zdal).length;
   console.log(`\n═══ BAZA: ${zdane} / ${wyniki.length} ═══`);
   if (zdane < wyniki.length) {

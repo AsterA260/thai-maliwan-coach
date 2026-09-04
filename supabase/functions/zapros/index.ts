@@ -17,17 +17,49 @@
 //  zwraca błąd. Nigdy nie odsyłamy sukcesu dla konta, które powstało
 //  tylko częściowo.
 //
+//  KLUCZ SERWISOWY TYLKO DO KONTA W AUTH. Druga runda audytu wykazała
+//  błąd, który blokował całe zapraszanie: klucz serwisowy omija RLS,
+//  ale NIE JEST zalogowanym Norbertem — `auth.uid()` jest wtedy puste,
+//  więc wyzwalacz `chron_profil` cofał nadaną rolę do 'kursant',
+//  a funkcja kasowała świeżo założone konto. Dlatego teraz:
+//    • klucz serwisowy robi WYŁĄCZNIE `inviteUserByEmail` i `deleteUser`;
+//    • rolę i przypisanie kursu zapisuje klient z tokenem
+//      zweryfikowanego administratora — dla niego `auth.uid()` jest
+//      jego identyfikatorem, więc wyzwalacz przepuszcza zmianę.
+//
 //  Wdrożenie:
 //     supabase functions deploy zapros
-//     supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... \
-//                          ADRES_APLIKACJI=https://coach.thaimaliwan.pl
-//  (klucz zostaje po stronie Supabase i nigdy nie schodzi do klienta)
+//     supabase secrets set ADRES_APLIKACJI=https://coach.thaimaliwan.pl
+//  Kluczy Supabase NIE ustawia się ręcznie — platforma sama podaje je
+//  funkcji w zmiennych środowiskowych (nowe `SUPABASE_SECRET_KEYS`
+//  i `SUPABASE_PUBLISHABLE_KEYS`, starsze `SUPABASE_SERVICE_ROLE_KEY`
+//  i `SUPABASE_ANON_KEY`). Klucz nigdy nie schodzi do przeglądarki.
 // ═══════════════════════════════════════════════════════════════════
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const URL_BAZY   = Deno.env.get('SUPABASE_URL')!;
-const KLUCZ_ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
-const KLUCZ_SERW = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+/** Nowe klucze (2026) przychodzą jako słownik JSON, starsze jako
+    pojedyncza wartość. Bierzemy pierwszą niepustą — i tak działa to
+    tylko po stronie Supabase. */
+function zeZmiennej(...nazwy: string[]): string {
+  for (const n of nazwy) {
+    const s = Deno.env.get(n);
+    if (!s) continue;
+    if (s.trim().startsWith('{')) {
+      try {
+        const v = Object.values(JSON.parse(s)).find(Boolean);
+        if (v) return String(v);
+      } catch { /* nie słownik — potraktuj jak zwykłą wartość */ }
+    }
+    return s;
+  }
+  return '';
+}
+
+const URL_BAZY   = Deno.env.get('SUPABASE_URL') ?? '';
+const KLUCZ_PUBL = zeZmiennej('SUPABASE_PUBLISHABLE_KEYS', 'SUPABASE_PUBLISHABLE_KEY',
+                              'SUPABASE_ANON_KEY');
+const KLUCZ_SERW = zeZmiennej('SUPABASE_SECRET_KEYS', 'SUPABASE_SECRET_KEY',
+                              'SUPABASE_SERVICE_ROLE_KEY');
 const ADRES_APP  = (Deno.env.get('ADRES_APLIKACJI') ?? '').replace(/\/+$/, '');
 
 const ROLE = ['kursant', 'instruktor', 'admin'];
@@ -54,12 +86,14 @@ Deno.serve(async (req) => {
   // 1. Zapytanie wstępne przeglądarki
   if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: CORS });
   if (req.method !== 'POST')    return odp(405, { blad: 'Zła metoda.' });
+  if (!URL_BAZY || !KLUCZ_PUBL || !KLUCZ_SERW)
+    return odp(500, { blad: 'Funkcja nie ma kompletu kluczy Supabase. Sprawdź zmienne środowiskowe.' });
 
   // 2. Kto pyta — token zalogowanego użytkownika z nagłówka
   const naglowek = req.headers.get('Authorization') ?? '';
   if (!naglowek.startsWith('Bearer ')) return odp(401, { blad: 'Nie jesteś zalogowany.' });
 
-  const jakoUzytkownik = createClient(URL_BAZY, KLUCZ_ANON, {
+  const jakoUzytkownik = createClient(URL_BAZY, KLUCZ_PUBL, {
     global: { headers: { Authorization: naglowek } },
     auth: { persistSession: false },
   });
@@ -82,7 +116,8 @@ Deno.serve(async (req) => {
   if (!ROLE.includes(rola))                          return odp(400, { blad: 'Nieznana rola.' });
   if (kurs_id && !UUID.test(String(kurs_id)))        return odp(400, { blad: 'Nieprawidłowy kurs.' });
 
-  // 5. Zaproszenie — TU i tylko tu używamy klucza serwisowego
+  // 5. Zaproszenie — TU i tylko tu używamy klucza serwisowego.
+  //    Poniżej, przy roli i kursie, wraca klient administratora.
   const jakoSerwis = createClient(URL_BAZY, KLUCZ_SERW, { auth: { persistSession: false } });
   const { data: nowy, error } = await jakoSerwis.auth.admin.inviteUserByEmail(adres, {
     data: { imie: imieCzyste },
@@ -109,17 +144,22 @@ Deno.serve(async (req) => {
                       stan: 'wycofane' });
   }
 
-  // 6. Rola — wyzwalacz założył profil z rolą 'kursant'
+  // 6. Rola — wyzwalacz założył profil z rolą 'kursant'.
+  //    ZAPIS IDZIE KLIENTEM ADMINISTRATORA, nie serwisowym: wyzwalacz
+  //    `chron_profil` przepuszcza zmianę roli tylko wtedy, gdy w sesji
+  //    siedzi zalogowany admin. Kluczem serwisowym `auth.uid()` jest
+  //    puste i zmiana zostałaby po cichu cofnięta.
   if (rola !== 'kursant') {
-    const { data: poZmianie, error: bladRoli } = await jakoSerwis
+    const { data: poZmianie, error: bladRoli } = await jakoUzytkownik
       .from('profile').update({ rola }).eq('id', idNowego).select('rola');
     if (bladRoli || !poZmianie?.length || poZmianie[0].rola !== rola)
       return await wycofaj('Konto powstało, ale nie udało się nadać roli.');
   }
 
-  // 7. Przypisanie do kursu
+  // 7. Przypisanie do kursu — również w kontekście administratora,
+  //    bo polityka `przypisanie_admin_all` sprawdza `jestem_adminem()`.
   if (kurs_id) {
-    const { data: poPrzypisaniu, error: bladPrzypisania } = await jakoSerwis
+    const { data: poPrzypisaniu, error: bladPrzypisania } = await jakoUzytkownik
       .from('przypisanie')
       .upsert({ kurs_id, kursant_id: idNowego, przypisal_id: user.id, aktywne: true },
               { onConflict: 'kurs_id,kursant_id' })

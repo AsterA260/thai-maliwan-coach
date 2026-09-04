@@ -2,7 +2,7 @@
 
 Zamknięta platforma szkoleniowa z prawdziwym logowaniem i trzema rolami.
 Nic nie jest opublikowane, nic nie poszło na GitHuba, wersja produkcyjna
-strony szkoły nietknięta. Gałąź: **`platforma-v3`**.
+strony szkoły nietknięta. Gałąź: **`platforma-v4`**.
 
 Co zmieniło się po audycie — patrz `RAPORT_ZMIAN.md`.
 Czego jeszcze nie sprawdziliśmy — `testy/oczekujace.md`.
@@ -103,10 +103,18 @@ Polityki zakłada `db/03_storage.sql`.
 
 ```bash
 supabase functions deploy zapros
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... ADRES_APLIKACJI=https://coach.thaimaliwan.pl
+supabase secrets set ADRES_APLIKACJI=https://coach.thaimaliwan.pl
 ```
 
-Klucz `service_role` zostaje po stronie Supabase. Front go nigdy nie widzi.
+**Kluczy Supabase NIE ustawiasz ręcznie.** Platforma sama podaje je
+funkcji w zmiennych środowiskowych — nowe `SUPABASE_SECRET_KEYS`
+i `SUPABASE_PUBLISHABLE_KEYS`, starsze `SUPABASE_SERVICE_ROLE_KEY`
+i `SUPABASE_ANON_KEY`. Funkcja bierze pierwszy, który zastanie.
+Klucz sekretny nigdy nie schodzi do przeglądarki.
+
+Funkcja używa klucza sekretnego **wyłącznie** do założenia konta
+w Auth (i do jego wycofania, gdy coś pójdzie nie tak). Rolę i kurs
+zapisuje już tokenem zalogowanego administratora — patrz 2.6.
 
 ### 2.5 Rejestracja i adresy powrotne
 
@@ -130,15 +138,55 @@ Klucz `service_role` zostaje po stronie Supabase. Front go nigdy nie widzi.
 przepuści — link z poczty wyrzuci użytkownika na stronę główną i hasła
 nie da się ustawić. Adres musi się zgadzać co do znaku, razem z `https://`.
 
-### 2.6 Pierwsze konta
+### 2.6 PIERWSZY ADMINISTRATOR — przeczytaj w całości
 
-**Authentication → Users → Invite user** dla każdej osoby. Po założeniu,
-w SQL Editor, nadaj role:
+To jedyne miejsce, które trzeba zrobić dokładnie tak, jak niżej.
+
+**Dlaczego nie zwykłym UPDATE-em.** Wyzwalacz `chron_profil` przepuszcza
+zmianę roli tylko wtedy, gdy w sesji siedzi zalogowany administrator
+(`auth.uid()` wskazuje na konto z rolą `admin`). W SQL Editorze nikt nie
+jest zalogowany, więc:
 
 ```sql
-update public.profile set rola = 'admin'      where email = 'norbert@thaimaliwan.pl';
-update public.profile set rola = 'instruktor' where email = 'maliwan@thaimaliwan.pl';
+update public.profile set rola = 'admin' where email = 'norbert@thaimaliwan.pl';
+-- UPDATE 1   ← i rola DALEJ jest 'kursant'. Baza cofa zmianę po cichu.
 ```
+
+To był realny błąd w poprzedniej wersji instrukcji. Teraz jest jedna,
+sprawdzona droga:
+
+**Krok 1.** Authentication → Users → **Invite user** → `norbert@thaimaliwan.pl`.
+Wyzwalacz założy profil z rolą `kursant`.
+
+**Krok 2.** SQL Editor:
+
+```sql
+select public.ustanow_pierwszego_admina('norbert@thaimaliwan.pl');
+```
+
+Funkcja:
+
+- **odmawia**, gdy istnieje już choć jeden aktywny administrator — więc
+  nie da się jej użyć drugi raz;
+- **nie jest dostępna** dla `anon` ani `authenticated`, czyli aplikacja
+  i przeglądarka nie mają do niej dostępu (test bazy 20);
+- bierze tę samą blokadę co ochrona ostatniego admina, więc dwa
+  równoczesne wywołania nie zrobią dwóch „pierwszych" adminów.
+
+**Krok 3.** Sprawdź:
+
+```sql
+select imie, email, rola, aktywne from public.profile order by rola;
+```
+
+**Krok 4.** Wszystkie kolejne konta — instruktorkę Maliwan, kursantów —
+zakładasz już **z aplikacji**: Konta → „Zaproś osobę". Tam rola nadaje
+się automatycznie, bo zapis idzie Twoim tokenem administratora.
+Do SQL Editora nie wracasz.
+
+Gdyby kiedyś trzeba było odtworzyć administratora po utracie wszystkich
+kont: wyłącz albo zdegraduj pozostałych adminów **z aplikacji**, a gdy
+nie ma już żadnego aktywnego — `ustanow_pierwszego_admina` znów zadziała.
 
 ### 2.7 Kursy i treść
 
@@ -154,20 +202,29 @@ Potem uruchom `db/05_import.sql` (wygenerowany z arkusza).
 ### 2.8 Front — jedno polecenie
 
 ```bash
-cp .env.example .env        # i uzupełnij SUPABASE_URL, SUPABASE_ANON_KEY,
-                            # ADRES_APLIKACJI
+cp .env.example .env        # i uzupełnij SUPABASE_URL,
+                            # SUPABASE_PUBLISHABLE_KEY, ADRES_APLIKACJI
 npm run konfig              # → web/konfig.js
 ```
+
+**Który klucz.** Project Settings → **API Keys**. Nowe projekty (2026)
+mają dwa: **publishable** (`sb_publishable_…`) — ten idzie do frontu —
+i **secret** (`sb_secret_…`), który omija RLS i zostaje po stronie
+serwera. Starsze projekty mają odpowiedniki `anon` i `service_role`;
+Supabase wygasza je **do końca 2026 roku**, więc dla nowego projektu
+bierzemy od razu nowe. Skrypt przyjmie jeden i drugi, ale przy starym
+kluczu wypisze ostrzeżenie.
 
 To wszystko. **Nie podmienia się żadnego kodu.** Od tej chwili wszystkie
 trzy ekrany chodzą po Supabase; przy pustym `SUPABASE_URL` wracają na
 serwer deweloperski. Sprawdzić można w konsoli przeglądarki: `window.TRYB`
 pokaże `supabase` albo `lokalny`.
 
-`npm run konfig` przepisuje do frontu **wyłącznie** `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, `SUPABASE_BUCKET` i `ADRES_APLIKACJI`. Klucz
-**service role** nie pojawia się we froncie **nigdy** — skrypt go
-pomija i mówi o tym wprost.
+`npm run konfig` przepisuje do frontu **wyłącznie** adres projektu,
+klucz publiczny, nazwę bucketu i adres aplikacji. Klucz **sekretny**
+nie pojawia się we froncie **nigdy**: skrypt go pomija, mówi o tym
+ostrzeżeniem, a na koniec sprawdza gotowy plik i **przerywa z błędem**,
+gdyby ten klucz mimo wszystko w nim był.
 
 ---
 
@@ -189,11 +246,12 @@ pomija i mówi o tym wprost.
 | `web/dane-supabase.js` | warstwa danych na produkcji |
 | `web/konfig.js` | generowany z `.env` przez `npm run konfig` |
 | `narzedzia/zbuduj-konfig.js` | generator konfiguracji frontu |
-| `testy/bezpieczenstwo.js` | 16 testów bazy i polityk RLS |
+| `testy/bezpieczenstwo.js` | 21 testów bazy, polityk RLS i ról |
 | `testy/http.js` | 16 testów przez HTTP: sesje, pliki, uprawnienia |
 | `testy/import.js` | 5 testów importu (idempotencja, postępy) |
 | `testy/kontrakty.js` | 15 testów zgodności front ↔ obie warstwy danych |
-| `testy/oczekujace.md` | **20 scenariuszy, których lokalnie nie da się sprawdzić** |
+| `testy/oczekujace.md` | **26 scenariuszy, których lokalnie nie da się sprawdzić** |
+| `.gitignore` | co nigdy nie trafia do repozytorium — na czele z `.env` |
 | `supabase/functions/zapros/` | Edge Function — jedyne miejsce z `service_role` |
 
 ---

@@ -232,22 +232,31 @@ drop trigger if exists pytanie_spojnosc on public.pytanie;
 create trigger pytanie_spojnosc before insert or update on public.pytanie
   for each row execute function public.sprawdz_pytanie();
 
--- ── Pytanie: instruktor zmienia TYLKO odpowiedź, status i autora odpowiedzi
+-- ── Pytanie: instruktor zmienia TYLKO odpowiedź i status ──────────
+--  Autora odpowiedzi i czas STEMPLUJE BAZA. Nikt — także admin — nie
+--  poda ich z zewnątrz, więc nie da się podpisać cudzym nazwiskiem.
 create or replace function public.chron_pytanie()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if public.jestem_adminem() then
-    return new;                       -- admin może wszystko
+  if new.odpowiedz is distinct from old.odpowiedz then
+    -- zmiana odpowiedzi = stempel: kto i kiedy, z sesji, nie z żądania
+    new.odpowiedzial_id := auth.uid();
+    new.odpowiedziano   := now();
+  else
+    -- bez zmiany odpowiedzi te pola zostają takie, jakie były
+    new.odpowiedzial_id := old.odpowiedzial_id;
+    new.odpowiedziano   := old.odpowiedziano;
   end if;
-  -- pola, których nie wolno ruszyć przy aktualizacji
+
+  if public.jestem_adminem() then
+    return new;                       -- admin może zmienić resztę pól
+  end if;
+  -- pola, których instruktor nie może ruszyć
   new.kursant_id := old.kursant_id;
   new.kurs_id    := old.kurs_id;
   new.etap_id    := old.etap_id;
   new.tresc      := old.tresc;
   new.utworzone  := old.utworzone;
-  if new.odpowiedz is distinct from old.odpowiedz then
-    new.odpowiedziano := now();
-  end if;
   return new;
 end $$;
 
@@ -298,10 +307,48 @@ returns bigint language sql stable security definer set search_path = public as 
    where rola = 'admin' and aktywne and id <> p_pomin
 $$;
 
+-- ── KONTEKST INICJALIZACYJNY ──────────────────────────────────────
+--  Audyt trafił w sedno: `chron_profil` przepuszczał zmianę roli tylko
+--  wtedy, gdy `jestem_adminem()` = prawda, czyli gdy w sesji siedzi
+--  zalogowany administrator. Ale przy zakładaniu pierwszego konta
+--  ŻADNEGO administratora jeszcze nie ma, a SQL Editor i klient
+--  `service_role` nie mają `auth.uid()`. Efekt: `UPDATE ... SET
+--  rola='admin'` mówił „UPDATE 1" i po cichu nic nie zmieniał.
+--
+--  Rozwiązanie: jedna, wąska furtka. Wyzwalacz przepuszcza zmianę,
+--  gdy w transakcji ustawiona jest flaga `astera.inicjalizacja`,
+--  ORAZ gdy robi to rola bazodanowa, a nie klient z przeglądarki.
+--  Flagę ustawia wyłącznie `ustanow_pierwszego_admina()` — funkcja
+--  bez prawa wykonania dla `anon` i `authenticated`, która odmawia
+--  działania, gdy administrator już istnieje.
+--
+--  Zwykły użytkownik nie ma jak tu wejść: przez PostgREST wywoła
+--  tylko funkcje ze schematu `public`, do których ma EXECUTE, a jego
+--  rola to `authenticated` albo `anon` — obie odrzucone.
+--
+--  UWAGA NA PUŁAPKĘ. Pierwsza wersja sprawdzała `current_user` i była
+--  DZIURAWA: wewnątrz funkcji `security definer` current_user to
+--  właściciel funkcji (postgres), a nie ten, kto ją wywołał. Kursant,
+--  który sam ustawił sobie flagę, przechodził. Wychwycił to test 20.
+--  Rolę wywołującego widać w GUC `role` (ustawianym przez SET ROLE)
+--  i w roli z tokenu — sprawdzamy OBIE, bo obie są odporne na
+--  `security definer`. Brak tokenu = SQL Editor, czyli migracja.
+create or replace function public.kontekst_inicjalizacji()
+returns boolean language sql stable set search_path = public as $$
+  select coalesce(current_setting('astera.inicjalizacja', true), '') = 'tak'
+     and coalesce(current_setting('role', true), 'brak') not in ('authenticated', 'anon')
+     and coalesce(
+           (coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::json->>'role'),
+           'brak') not in ('authenticated', 'anon')
+$$;
+
 -- ── Profil: nikt sam sobie nie zmieni e-maila, roli ani aktywności ─
 create or replace function public.chron_profil()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
+  if public.kontekst_inicjalizacji() then
+    return new;                       -- zakładanie pierwszego administratora
+  end if;
   if public.jestem_adminem() then
     -- ostatni aktywny administrator nie może zostać wyłączony ani zdegradowany
     if (old.rola = 'admin' and old.aktywne)
@@ -342,6 +389,52 @@ end $$;
 drop trigger if exists profil_ostatni_admin on public.profile;
 create trigger profil_ostatni_admin before delete on public.profile
   for each row execute function public.chron_ostatniego_admina();
+
+-- ═══════════════════════════════════════════════════════════════════
+--  PIERWSZY ADMINISTRATOR — jedyna droga, i tylko raz
+--
+--  Wywołanie (SQL Editor w panelu Supabase, po założeniu konta przez
+--  Authentication → Invite user):
+--
+--      select public.ustanow_pierwszego_admina('norbert@thaimaliwan.pl');
+--
+--  Zabezpieczenia:
+--   • odmawia, gdy istnieje choć jeden AKTYWNY administrator — więc
+--     nie da się jej użyć drugi raz do podniesienia sobie roli;
+--   • nie ma prawa wykonania dla `anon` ani `authenticated`, czyli
+--     jest nieosiągalna przez PostgREST i przez aplikację;
+--   • bierze tę samą blokadę co ochrona ostatniego admina, więc dwa
+--     równoczesne wywołania nie zrobią dwóch „pierwszych" adminów;
+--   • flagę inicjalizacji ustawia i gasi sama, w jednej transakcji.
+-- ═══════════════════════════════════════════════════════════════════
+create or replace function public.ustanow_pierwszego_admina(p_email text)
+returns public.profile
+language plpgsql security definer set search_path = public as $$
+declare w public.profile;
+begin
+  perform public.zablokuj_licznik_adminow();
+
+  if exists (select 1 from public.profile where rola = 'admin' and aktywne) then
+    raise exception 'Administrator juz istnieje — role nadaje sie w panelu Konta.'
+      using errcode = '42501';
+  end if;
+
+  perform set_config('astera.inicjalizacja', 'tak', true);
+  update public.profile
+     set rola = 'admin', aktywne = true
+   where lower(email) = lower(trim(p_email))
+   returning * into w;
+  perform set_config('astera.inicjalizacja', 'nie', true);
+
+  if w.id is null then
+    raise exception 'Nie ma konta o adresie %. Najpierw zapros je w Authentication → Users.', p_email
+      using errcode = '23503';
+  end if;
+  return w;
+end $$;
+
+comment on function public.ustanow_pierwszego_admina(text) is
+  'Jedyna droga do pierwszego administratora. Odmawia, gdy admin juz istnieje.';
 
 -- ═══════════════════════════════════════════════════════════════════
 --  WIDOK KURSANTÓW — jedno źródło liczb dla obu warstw danych

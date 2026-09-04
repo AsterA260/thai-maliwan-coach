@@ -1,11 +1,12 @@
 # Testy OCZEKUJĄCE — czego jeszcze nie sprawdziliśmy
 
-Uczciwie: **52 testy, które przechodzą, nie są pełnym testem systemu.**
+Uczciwie: **57 testów, które przechodzą, nie jest pełnym testem systemu.**
+Oczekujących scenariuszy na żywym Supabase jest **26** — arytmetyka na końcu pliku.
 Poniższe scenariusze wymagają żywego projektu Supabase. Nikt takiego
 nie założył, więc te testy **nie zostały wykonane** i nie udajemy,
 że jest inaczej.
 
-Stan na 4 września 2026, gałąź `platforma-v3`.
+Stan na 4 września 2026, gałąź `platforma-v4`.
 
 ---
 
@@ -13,15 +14,15 @@ Stan na 4 września 2026, gałąź `platforma-v3`.
 
 | poziom | co to znaczy | ile testów |
 |---|---|---|
-| **1. Lokalne — wykonane** | prawdziwy PostgreSQL, prawdziwy serwer, prawdziwe pliki | **37** |
+| **1. Lokalne — wykonane** | prawdziwy PostgreSQL, prawdziwy serwer, prawdziwe pliki | **42** |
 | **2. Adapter produkcyjny — wykonane** | kod warstwy Supabase uruchomiony na atrapie klienta, na **prawdziwych wierszach z bazy**; sprawdzamy kontrakt i kształt danych, nie sieć | **15** |
-| **3. Żywy Supabase — OCZEKUJĄCE** | Auth, Storage, Edge Function po HTTP | **0 z 20** |
+| **3. Żywy Supabase — OCZEKUJĄCE** | Auth, Storage, Edge Function po HTTP | **0 z 26** |
 
 ### Poziom 1 — lokalne, wykonane
 
 | zestaw | plik | ile | na czym |
 |---|---|---|---|
-| Baza i RLS | `testy/bezpieczenstwo.js` | 16 | PostgreSQL 16, RLS włączony i **wymuszony** |
+| Baza, RLS i role | `testy/bezpieczenstwo.js` | 21 | PostgreSQL 16, RLS włączony i **wymuszony** |
 | HTTP, sesje, pliki | `testy/http.js` | 16 | prawdziwy serwer, prawdziwe ciasteczka i żądania |
 | Import z arkusza | `testy/import.js` | 5 | prawdziwy arkusz, prawdziwa baza |
 
@@ -59,6 +60,7 @@ Storage, Edge Functions — to usługi Supabase, których lokalnie nie ma.
 | A7 | Wyłączone konto nie odświeży już tokenu | Auth przechowuje sesje po swojej stronie |
 | A8 | Ograniczenie liczby prób logowania | Supabase ma to wbudowane; wersja dev **nie ma tego wcale** |
 | A9 | Adresy powrotne (Redirect URLs) przepuszczają `/nowe-haslo.html`, a odrzucają obce | lista jest w panelu Supabase |
+| A10 | Nowe klucze `sb_publishable_…` i `sb_secret_…` działają tam, gdzie dawniej `anon` i `service_role` | klucze wydaje panel Supabase |
 
 **Uwaga do A8:** to jedyna rzecz z listy, której brak jest realną luką
 w wersji deweloperskiej. Na produkcji obsługuje ją Supabase.
@@ -94,6 +96,8 @@ ale pokazuje, że logika jest poprawna.
 | E5 | Klucz `service_role` nie wycieka w odpowiedzi ani w logach |
 | E6 | Zapytanie wstępne `OPTIONS` dostaje nagłówki CORS i 200 |
 | E7 | Błąd nadania roli **wycofuje** konto — po nieudanym zaproszeniu nie zostaje osierocony użytkownik |
+| E8 | Zaproszenie instruktora naprawdę kończy się profilem `instruktor` (lokalnie sprawdzone na bazie — test 17 — ale nie przez samą funkcję) |
+| E9 | Zaproszenie administratora naprawdę kończy się profilem `admin` (jw., test 18) |
 
 ---
 
@@ -106,8 +110,25 @@ ale pokazuje, że logika jest poprawna.
 4. `supabase functions deploy zapros` + sekrety.
 5. `.env` → `npm run konfig` → front sam przełącza się na Supabase.
    **Nie ma żadnej ręcznej podmiany kodu.**
-6. Przejść listę A1–A9, S1–S7 i E1–E7 ręcznie albo dopisać testy
+6. Pierwszy administrator: `select public.ustanow_pierwszego_admina('…')`
+   — patrz `URUCHOMIENIE.md` §2.6. Zwykły `UPDATE` **nie zadziała**.
+7. Przejść listę A1–A10, S1–S7 i E1–E9 ręcznie albo dopisać testy
    przeciwko żywemu projektowi.
+
+### Arytmetyka, żeby nie było wątpliwości
+
+```
+Auth     A1–A10   10
+Storage  S1–S7     7
+Edge     E1–E9     9
+                 ────
+razem             26   scenariuszy OCZEKUJĄCYCH
+```
+
+Poprzednia wersja tego pliku pisała „20", choć z listy wychodziły 23 —
+audyt słusznie to wytknął. Po dopisaniu A10 (nowe klucze) oraz E8 i E9
+(role przy zaproszeniu, sprawdzone lokalnie, ale nie przez samą funkcję)
+jest ich **26**.
 
 Dopiero po zamknięciu tej listy wolno mówić, że system jest przetestowany
 od końca do końca.

@@ -8,13 +8,15 @@
    Uzupełnione       = tryb produkcyjny (Supabase).
 
    Trafiają tu WYŁĄCZNIE wartości jawne, widoczne i tak w każdym
-   zapytaniu przeglądarki. Klucz `service_role` omija RLS i NIE MOŻE
-   znaleźć się w żadnym pliku frontu — żyje tylko w sekretach Supabase,
-   po stronie Edge Function.
+   zapytaniu przeglądarki: adres projektu i klucz PUBLICZNY
+   (`sb_publishable_…`, albo starszy `anon`). Klucz sekretny
+   (`sb_secret_…` / `service_role`) omija RLS i NIE MOŻE znaleźć się
+   w żadnym pliku frontu — generator go pomija i sprawdza wynik.
    ═══════════════════════════════════════════════════════════════════ */
 window.KONFIG = {
-  SUPABASE_URL:      '',
-  SUPABASE_ANON_KEY: '',
-  SUPABASE_BUCKET:   'materialy',
-  ADRES_APLIKACJI:   '',
+  SUPABASE_URL:             '',
+  SUPABASE_PUBLISHABLE_KEY: '',
+  SUPABASE_ANON_KEY:        '',
+  SUPABASE_BUCKET:          'materialy',
+  ADRES_APLIKACJI:          '',
 };
