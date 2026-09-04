@@ -59,13 +59,31 @@ const spij = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   console.log('Zakładam testowy projekt Supabase (plan darmowy)…\n');
 
+  /* ── ORGANIZACJA — zawsze wskazana wprost ──────────────────────
+     Nigdy „pierwsza z brzegu": na koncie może być organizacja firmowa
+     obok prywatnej, a projekt założony w niepowołanym miejscu to
+     rachunek i dane w cudzym rozliczeniu.                            */
   const organizacje = await api('/organizations');
   if (!organizacje.length) { console.error('Konto nie ma żadnej organizacji.'); process.exit(1); }
-  const org = process.env.ORG_SUPABASE
-    ? organizacje.find(o => o.id === process.env.ORG_SUPABASE || o.name === process.env.ORG_SUPABASE)
-    : organizacje[0];
-  if (!org) { console.error('Nie znalazłem wskazanej organizacji.'); process.exit(1); }
-  console.log(`organizacja: ${org.name}`);
+
+  const wskazana = process.env.ORG_SUPABASE || '';
+  const org = wskazana
+    ? organizacje.find(o => o.id === wskazana || o.name === wskazana ||
+                            o.slug === wskazana)
+    : null;
+
+  if (!org) {
+    console.error(wskazana
+      ? `\nNie znalazłem organizacji „${wskazana}".`
+      : '\nNie wskazano organizacji — nie wybieram jej za Ciebie.');
+    console.error('\nDostępne organizacje na tym koncie:\n');
+    for (const o of organizacje)
+      console.error(`  ${o.name}${o.slug ? `  (slug: ${o.slug})` : ''}\n      id: ${o.id}`);
+    console.error('\nUruchom ponownie, wskazując organizację nazwą, slugiem albo id:\n');
+    console.error(`  ORG_SUPABASE="${organizacje[0].name}" npm run projekt:testowy\n`);
+    process.exit(2);
+  }
+  console.log(`organizacja: ${org.name} (${org.id})`);
 
   const istnieje = (await api('/projects')).find(p => p.name === NAZWA);
   let projekt = istnieje;
@@ -81,12 +99,30 @@ const spij = ms => new Promise(r => setTimeout(r, ms));
     console.log('hasło do bazy zapisane w .haslo-bazy-testowej (plik 600, w .gitignore)');
   }
 
+  /* ── CZEKANIE — z twardym końcem ──────────────────────────────
+     Po limicie czasu KOŃCZYMY BŁĘDEM. Wcześniej pętla po prostu się
+     wyczerpywała i skrypt szedł dalej po klucze do projektu, który
+     jeszcze nie wstał — a to kończyłoby się mylącym błędem kilka
+     linijek później.                                                */
+  const LIMIT_PROB = 60, ODSTEP_MS = 5000;         // ~5 minut
   process.stdout.write('czekam, aż projekt wstanie');
-  for (let i = 0; i < 60; i++) {
+  let gotowy = false, ostatniStan = 'nieznany';
+  for (let i = 0; i < LIMIT_PROB; i++) {
     const p = await api(`/projects/${projekt.id}`);
-    if (p.status === 'ACTIVE_HEALTHY') { console.log(' — gotowy'); break; }
+    ostatniStan = p.status;
+    if (p.status === 'ACTIVE_HEALTHY') { console.log(' — gotowy'); gotowy = true; break; }
+    if (['INACTIVE', 'INIT_FAILED', 'REMOVED', 'RESTORE_FAILED'].includes(p.status)) {
+      console.error(`\nProjekt zatrzymał się w stanie ${p.status}. Sprawdź panel Supabase.`);
+      process.exit(1);
+    }
     process.stdout.write('.');
-    await spij(5000);
+    await spij(ODSTEP_MS);
+  }
+  if (!gotowy) {
+    console.error(`\nBŁĄD: projekt nie wstał w ciągu ${LIMIT_PROB * ODSTEP_MS / 60000} minut.`);
+    console.error(`Ostatni stan: ${ostatniStan}. Projekt ${projekt.id} istnieje — sprawdź panel`);
+    console.error('i uruchom to polecenie ponownie, gdy będzie ACTIVE_HEALTHY.');
+    process.exit(1);
   }
 
   const klucze = await api(`/projects/${projekt.id}/api-keys?reveal=true`);
@@ -116,4 +152,7 @@ const spij = ms => new Promise(r => setTimeout(r, ms));
   console.log('  3. supabase functions deploy zapros --project-ref ' + projekt.id);
   console.log('  4. Authentication → URL Configuration → Redirect URLs (patrz URUCHOMIENIE.md §2.5)');
   console.log('  5. npm run konfig && npm run e2e');
+  console.log('\n  Przy pierwszym `npm run e2e` skrypt zatrzyma się i poda jedną komendę');
+  console.log('  do SQL Editora (`select public.ustanow_pierwszego_admina(...)`). Tak ma być —');
+  console.log('  roli admin nie nadaje się kluczem sekretnym.');
 })().catch(e => { console.error('\nBŁĄD:', e.message); process.exit(1); });

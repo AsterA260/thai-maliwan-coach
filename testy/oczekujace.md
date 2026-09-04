@@ -112,11 +112,19 @@ ale pokazuje, że logika jest poprawna.
    **Nie ma żadnej ręcznej podmiany kodu.**
 6. Pierwszy administrator: `select public.ustanow_pierwszego_admina('…')`
    — patrz `URUCHOMIENIE.md` §2.6. Zwykły `UPDATE` **nie zadziała**.
-7. `npm run e2e` — runner `testy/e2e_supabase.js` wykonuje 24 z 26
-   scenariuszy automatycznie i zapisuje `testy/WYNIK_E2E.md` z odpowiedzią
-   systemu przy każdym punkcie. Dwa pozostałe (**A5** — kliknięcie w link
-   ze skrzynki, **E7** — wymuszona awaria nadania roli) wychodzą w raporcie
-   jako `RĘCZNY` i trzeba je potwierdzić samemu.
+7. `npm run e2e` — runner `testy/e2e_supabase.js` przechodzi wszystkie
+   26 scenariuszy i zapisuje `testy/WYNIK_E2E.md` z odpowiedzią systemu
+   przy każdym punkcie. Wyniki mają cztery stany:
+
+   | stan | ile | które |
+   |---|---|---|
+   | PASS / FAIL — rozstrzygnięte maszynowo | 22 | A1, A2, A3, A6, A7, A8, A9, A10, S1–S7, E1, E2, E4, E5, E6, E8, E9 |
+   | CZĘŚCIOWY — część maszynowo, reszta wymaga skrzynki | 2 | A4 (reset), E3 (zaproszenie) |
+   | RĘCZNY — maszynowo się nie da | 2 | A5 (link z poczty), E7 (wymuszona awaria roli) |
+
+   Przy pierwszym uruchomieniu runner **zatrzyma się** i poda jedną komendę
+   do SQL Editora — nadanie roli admin kontu testowemu. To celowe: roli
+   `admin` nie nadaje się kluczem sekretnym.
 
 ### Arytmetyka, żeby nie było wątpliwości
 
