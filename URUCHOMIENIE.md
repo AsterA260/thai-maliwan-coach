@@ -2,7 +2,7 @@
 
 Zamknięta platforma szkoleniowa z prawdziwym logowaniem i trzema rolami.
 Nic nie jest opublikowane, nic nie poszło na GitHuba, wersja produkcyjna
-strony szkoły nietknięta. Gałąź: **`platforma-v4`**.
+strony szkoły nietknięta. Gałąź: **`platforma-v5`**.
 
 Co zmieniło się po audycie — patrz `RAPORT_ZMIAN.md`.
 Czego jeszcze nie sprawdziliśmy — `testy/oczekujace.md`.
@@ -184,9 +184,53 @@ zakładasz już **z aplikacji**: Konta → „Zaproś osobę". Tam rola nadaje
 się automatycznie, bo zapis idzie Twoim tokenem administratora.
 Do SQL Editora nie wracasz.
 
-Gdyby kiedyś trzeba było odtworzyć administratora po utracie wszystkich
-kont: wyłącz albo zdegraduj pozostałych adminów **z aplikacji**, a gdy
-nie ma już żadnego aktywnego — `ustanow_pierwszego_admina` znów zadziała.
+### 2.6a Odzyskanie administratora — sprostowanie
+
+**Poprzednia wersja tej instrukcji była myląca.** Pisała: „wyłącz albo
+zdegraduj pozostałych adminów z aplikacji, a gdy nie ma już żadnego
+aktywnego — funkcja znów zadziała". **Tak się nie da** i sprawdziłem to
+na bazie: ostatniego aktywnego administratora chroni wyzwalacz, więc
+próba z aplikacji kończy się błędem:
+
+```
+ERROR: To jedyny aktywny administrator — nie mozna go wylaczyc ani zdegradowac.
+```
+
+Czyli stan „zero aktywnych adminów" nigdy nie powstanie tą drogą.
+Prawdziwe scenariusze wyglądają tak:
+
+| sytuacja | co zrobić |
+|---|---|
+| **Zapomniane hasło administratora** | „Ustaw nowe" na ekranie logowania. Konto i rola zostają bez zmian. To 99 % przypadków. |
+| **Skrzynka administratora niedostępna** | Authentication → Users → zmień adres konta albo wyślij link resetu z panelu. |
+| **Jest drugi administrator** | On nadaje rolę w aplikacji: Konta → wybierz osobę → `admin`. Nic więcej nie trzeba. |
+| **Naprawdę nie ma dostępu do żadnego konta admina** | Procedura ratunkowa niżej — **tylko z panelu Supabase**. |
+
+**Procedura ratunkowa** (SQL Editor, wymaga dostępu do panelu Supabase,
+czyli najwyższych uprawnień, jakie w ogóle są). Cała w jednej transakcji,
+żeby dało się ją przerwać:
+
+```sql
+begin;
+  select set_config('astera.inicjalizacja', 'tak', true);
+  update public.profile set rola = 'instruktor' where rola = 'admin' and aktywne;
+  select set_config('astera.inicjalizacja', 'nie', true);
+
+  select public.ustanow_pierwszego_admina('nowy.admin@thaimaliwan.pl');
+  select imie, email, rola from public.profile where rola = 'admin';
+-- sprawdź wynik powyżej. Dobrze? → commit;   Źle? → rollback;
+commit;
+```
+
+Sprawdzone na bazie: po `commit` nowy adres ma rolę `admin`, po
+`rollback` nic się nie zmienia.
+
+**Dlaczego to nie jest furtka.** Wykonać to może wyłącznie osoba
+zalogowana do panelu Supabase — a kto ma panel, ma i tak pełną władzę
+nad bazą. Z aplikacji, z przeglądarki i z klucza publicznego ta droga
+jest niedostępna: flaga `astera.inicjalizacja` działa tylko poza rolami
+`authenticated` i `anon` (test bazy 20), a sama funkcja nie ma dla nich
+prawa wykonania.
 
 ### 2.7 Kursy i treść
 

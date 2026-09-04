@@ -14,6 +14,8 @@
     "testy:import": "node testy/import.js",
     "import": "python3 db/import_xlsx.py AsterA_Coach_Baza_Tresci.xlsx > db/05_import.sql",
     "testy:kontrakty": "node testy/kontrakty.js",
-    "konfig": "node narzedzia/zbuduj-konfig.js"
+    "konfig": "node narzedzia/zbuduj-konfig.js",
+    "e2e": "node testy/e2e_supabase.js",
+    "projekt:testowy": "node narzedzia/zaloz-projekt.js"
   }
 }

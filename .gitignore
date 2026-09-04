@@ -9,6 +9,8 @@
 *.pem
 *.key
 sekrety*
+.supabase-token
+.haslo-bazy-testowej
 supabase/.temp/
 
 # ── zależności i wyniki budowania ────────────────────────────────

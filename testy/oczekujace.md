@@ -6,7 +6,7 @@ Poniższe scenariusze wymagają żywego projektu Supabase. Nikt takiego
 nie założył, więc te testy **nie zostały wykonane** i nie udajemy,
 że jest inaczej.
 
-Stan na 4 września 2026, gałąź `platforma-v4`.
+Stan na 4 września 2026, gałąź `platforma-v5`. Wykonanie: `npm run e2e`.
 
 ---
 
@@ -112,8 +112,11 @@ ale pokazuje, że logika jest poprawna.
    **Nie ma żadnej ręcznej podmiany kodu.**
 6. Pierwszy administrator: `select public.ustanow_pierwszego_admina('…')`
    — patrz `URUCHOMIENIE.md` §2.6. Zwykły `UPDATE` **nie zadziała**.
-7. Przejść listę A1–A10, S1–S7 i E1–E9 ręcznie albo dopisać testy
-   przeciwko żywemu projektowi.
+7. `npm run e2e` — runner `testy/e2e_supabase.js` wykonuje 24 z 26
+   scenariuszy automatycznie i zapisuje `testy/WYNIK_E2E.md` z odpowiedzią
+   systemu przy każdym punkcie. Dwa pozostałe (**A5** — kliknięcie w link
+   ze skrzynki, **E7** — wymuszona awaria nadania roli) wychodzą w raporcie
+   jako `RĘCZNY` i trzeba je potwierdzić samemu.
 
 ### Arytmetyka, żeby nie było wątpliwości
 
