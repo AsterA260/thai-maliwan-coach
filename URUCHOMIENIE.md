@@ -2,10 +2,23 @@
 
 Zamknięta platforma szkoleniowa z prawdziwym logowaniem i trzema rolami.
 Nic nie jest opublikowane, nic nie poszło na GitHuba, wersja produkcyjna
-strony szkoły nietknięta. Gałąź: **`platforma-poprawki`**.
+strony szkoły nietknięta. Gałąź: **`platforma-v3`**.
 
 Co zmieniło się po audycie — patrz `RAPORT_ZMIAN.md`.
 Czego jeszcze nie sprawdziliśmy — `testy/oczekujace.md`.
+
+## Jedna rzecz, którą warto wiedzieć na starcie
+
+Ekrany **nie wiedzą**, skąd biorą dane. Wołają `DANE.<funkcja>()`,
+a `web/warstwa-danych.js` podstawia pod to jedno z dwojga:
+
+| kiedy | co siedzi pod spodem |
+|---|---|
+| `web/konfig.js` ma puste `SUPABASE_URL` | serwer deweloperski `/api/*` |
+| `web/konfig.js` ma adres Supabase | `web/dane-supabase.js` |
+
+Przejście na produkcję to **wygenerowanie konfig.js** (`npm run konfig`),
+nie przepisywanie kodu.
 
 ---
 
@@ -34,7 +47,7 @@ psql -h /tmp -p 5433 -U postgres -d coach -f db/05_import.sql
 npm install
 npm start                   # → http://127.0.0.1:8910
 
-# wszystkie testy (baza + HTTP + import)
+# wszystkie testy (baza + HTTP + import + kontrakty)
 npm run testy
 ```
 
@@ -74,13 +87,12 @@ W panelu → **SQL Editor** → uruchom po kolei:
 **`db/00_supabase_lokalnie.sql` POMIŃ** — to atrapa warstwy Auth, potrzebna
 tylko lokalnie. Na Supabase `auth.users` i `auth.uid()` już istnieją.
 
-Potem podłącz zakładanie profilu przy nowym koncie:
-
-```sql
-create trigger na_nowego_uzytkownika
-  after insert on auth.users
-  for each row execute function public.obsluz_nowego_uzytkownika();
-```
+Wyzwalacz `na_nowego_uzytkownika` (profil dla każdego nowego konta)
+**zakłada się sam** — jest częścią `db/01_schema.sql` i można go
+uruchomić wielokrotnie. W logu SQL Editora zobaczysz:
+`NOTICE: Wyzwalacz na_nowego_uzytkownika zalozony na auth.users.`
+Gdyby zamiast tego pojawiło się `WARNING`, zatrzymaj się — bez tego
+wyzwalacza zaproszone osoby nie dostaną profilu i nie zalogują się.
 
 ### 2.3 Magazyn plików
 
@@ -96,7 +108,7 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... ADRES_APLIKACJI=https://coach
 
 Klucz `service_role` zostaje po stronie Supabase. Front go nigdy nie widzi.
 
-### 2.5 Wyłączenie publicznej rejestracji
+### 2.5 Rejestracja i adresy powrotne
 
 **Authentication → Providers → Email**:
 
@@ -104,8 +116,19 @@ Klucz `service_role` zostaje po stronie Supabase. Front go nigdy nie widzi.
 - `Allow new users to sign up`: ❌ **WYŁĄCZ** — konta zakłada wyłącznie admin
 - `Confirm email`: ✅
 
-**Authentication → URL Configuration** → `Site URL` = adres aplikacji
-(np. `https://coach.thaimaliwan.pl`).
+**Authentication → URL Configuration**:
+
+| pole | wartość |
+|---|---|
+| `Site URL` | `https://coach.thaimaliwan.pl` |
+| `Redirect URLs` | `https://coach.thaimaliwan.pl/nowe-haslo.html` |
+| `Redirect URLs` | `https://coach.thaimaliwan.pl/index.html` |
+| `Redirect URLs` (tylko gdy testujesz lokalnie) | `http://127.0.0.1:8910/nowe-haslo.html` |
+
+**To nie jest ozdobnik.** Zaproszenie i reset hasła odsyłają pod
+`/nowe-haslo.html`. Adresu, którego nie ma na tej liście, Supabase nie
+przepuści — link z poczty wyrzuci użytkownika na stronę główną i hasła
+nie da się ustawić. Adres musi się zgadzać co do znaku, razem z `https://`.
 
 ### 2.6 Pierwsze konta
 
@@ -128,11 +151,23 @@ values ('podstawowy','Tradycyjny masaż tajski','นวดแผนไทยด�
 
 Potem uruchom `db/05_import.sql` (wygenerowany z arkusza).
 
-### 2.8 Front
+### 2.8 Front — jedno polecenie
 
-W `.env` (z `.env.example`) uzupełnij `SUPABASE_URL` i `SUPABASE_ANON_KEY`,
-a w `app.html` podmień funkcję `api` na moduł `web/dane-supabase.js`.
-Klucz **service role** nie pojawia się we froncie **nigdy**.
+```bash
+cp .env.example .env        # i uzupełnij SUPABASE_URL, SUPABASE_ANON_KEY,
+                            # ADRES_APLIKACJI
+npm run konfig              # → web/konfig.js
+```
+
+To wszystko. **Nie podmienia się żadnego kodu.** Od tej chwili wszystkie
+trzy ekrany chodzą po Supabase; przy pustym `SUPABASE_URL` wracają na
+serwer deweloperski. Sprawdzić można w konsoli przeglądarki: `window.TRYB`
+pokaże `supabase` albo `lokalny`.
+
+`npm run konfig` przepisuje do frontu **wyłącznie** `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `SUPABASE_BUCKET` i `ADRES_APLIKACJI`. Klucz
+**service role** nie pojawia się we froncie **nigdy** — skrypt go
+pomija i mówi o tym wprost.
 
 ---
 
@@ -149,12 +184,16 @@ Klucz **service role** nie pojawia się we froncie **nigdy**.
 | `serwer/dev.js` | serwer deweloperski; **nie zawiera żadnej reguły uprawnień** |
 | `web/index.html` | ekran logowania |
 | `web/app.html` | aplikacja — orbita na laptopie, lista na telefonie |
+| `web/nowe-haslo.html` | ustawienie hasła z zaproszenia albo resetu |
+| `web/warstwa-danych.js` | **przełącznik**: lokalnie `/api/*`, na produkcji Supabase |
 | `web/dane-supabase.js` | warstwa danych na produkcji |
-| `testy/bezpieczenstwo.js` | 15 testów bazy i polityk RLS |
+| `web/konfig.js` | generowany z `.env` przez `npm run konfig` |
+| `narzedzia/zbuduj-konfig.js` | generator konfiguracji frontu |
+| `testy/bezpieczenstwo.js` | 16 testów bazy i polityk RLS |
 | `testy/http.js` | 16 testów przez HTTP: sesje, pliki, uprawnienia |
 | `testy/import.js` | 5 testów importu (idempotencja, postępy) |
+| `testy/kontrakty.js` | 15 testów zgodności front ↔ obie warstwy danych |
 | `testy/oczekujace.md` | **20 scenariuszy, których lokalnie nie da się sprawdzić** |
-| `web/nowe-haslo.html` | ustawienie hasła z zaproszenia albo resetu |
 | `supabase/functions/zapros/` | Edge Function — jedyne miejsce z `service_role` |
 
 ---

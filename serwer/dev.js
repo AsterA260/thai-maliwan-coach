@@ -265,17 +265,10 @@ const API = {
   /* ── konta ────────────────────────────────────────────────── */
   async 'GET /api/kursanci'(_c, s){
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
-    return [200, await zapytaj(s.uid, `
-      select pr.id, pr.imie, pr.email, k.nazwa_pl as kurs, k.id as kurs_id,
-        (select count(*) from public.postep po
-          join public.etap e on e.id=po.etap_id join public.lekcja l on l.id=e.lekcja_id
-          where po.kursant_id=pr.id and l.kurs_id=k.id and po.status='zrobione') as zrobione,
-        (select count(*) from public.etap e join public.lekcja l on l.id=e.lekcja_id
-          where l.kurs_id=k.id) as etapow
-      from public.przypisanie z
-      join public.profile pr on pr.id = z.kursant_id
-      join public.kurs k on k.id = z.kurs_id
-      where z.aktywne order by pr.imie`)];
+    // Ten sam widok, z którego korzysta warstwa Supabase — jeden
+    // kontrakt, jedno miejsce liczenia postępów.
+    return [200, await zapytaj(s.uid,
+      `select * from public.widok_kursanci order by imie`)];
   },
 
   async 'GET /api/konta'(_c, s){
@@ -429,20 +422,37 @@ async function wgrajPlik(req, res, u, sesja){
 
   // 1. plik do pliku tymczasowego, z twardym limitem rozmiaru
   const tymczasowy = path.join(MAGAZYN, '.tmp-' + crypto.randomBytes(8).toString('hex'));
-  await fsp.mkdir(MAGAZYN, { recursive: true });
-  let bajtow = 0, zaDuzy = false, bladOdczytu = null;
-  const strumien = fs.createWriteStream(tymczasowy);
+  try { await fsp.mkdir(MAGAZYN, { recursive: true }); }
+  catch (e) { return odrzuc(500, { blad: 'Magazyn plików jest niedostępny.' }); }
+
+  let bajtow = 0, zaDuzy = false, bladOdczytu = null, bladZapisu = null;
+  let strumien;
+  try { strumien = fs.createWriteStream(tymczasowy); }
+  catch (e) { return odrzuc(500, { blad: 'Magazyn plików jest niedostępny.' }); }
+
+  // Bez tej obsługi każdy błąd zapisu (brak praw, pełny dysk) leciał
+  // jako nieobsłużone zdarzenie i ZABIJAŁ CAŁY SERWER. Teraz kończy
+  // się jednym czytelnym błędem tego jednego żądania.
   await new Promise(ok => {
+    let skonczone = false;
+    const koniec = () => { if (!skonczone) { skonczone = true; ok(); } };
+    strumien.on('error', e => { bladZapisu = e; koniec(); });
     req.on('data', d => {
+      if (bladZapisu) return;
       bajtow += d.length;
       // Nie zrywamy połączenia — dopiero wtedy klient dostałby błąd sieci
       // zamiast czytelnego komunikatu. Resztę po prostu wyrzucamy.
       if (bajtow > LIMIT_B) { zaDuzy = true; return; }
       strumien.write(d);
     });
-    req.on('end',   () => strumien.end(ok));
-    req.on('error', e  => { bladOdczytu = e; strumien.end(ok); });
+    req.on('end',   () => strumien.end(koniec));
+    req.on('error', e  => { bladOdczytu = e; strumien.end(koniec); });
   });
+  if (bladZapisu) {
+    req.resume();
+    await fsp.rm(tymczasowy, { force: true }).catch(() => {});
+    return odpowiedz(res, 500, { blad: 'Nie udało się zapisać pliku w magazynie.' });
+  }
   if (zaDuzy || bladOdczytu) {
     await fsp.rm(tymczasowy, { force: true });
     return odpowiedz(res, zaDuzy ? 413 : 400,

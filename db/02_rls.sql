@@ -253,6 +253,10 @@ grant select, insert, update, delete on
   public.etap, public.material, public.postep, public.pytanie, public.zaproszenie
   to authenticated;
 
+-- Widok kursantów: tylko do odczytu. Ma `security_invoker`, więc i tak
+-- pokazuje wyłącznie to, co pytającemu przepuszczą polityki tabel.
+grant select on public.widok_kursanci to authenticated;
+
 -- Tylko funkcje, których naprawdę używa aplikacja i polityki.
 -- Wyzwalacze i funkcje SECURITY DEFINER wywołują się z wnętrza bazy,
 -- więc nie muszą być dostępne dla roli `authenticated`.

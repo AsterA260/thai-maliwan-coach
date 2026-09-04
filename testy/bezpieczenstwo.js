@@ -287,6 +287,45 @@ function sprawdz(nr, opis, warunek, szczegol) {
     n(o1) === 3 && n(o2) === 5 && n(o3) === 3,
     `Norbert: kursów ${n(o1)}/3, kont ${n(o2)}/5 · Maliwan: kont ${n(o3)}`);
 
+  /* ── 16. WYŚCIG: dwie równoczesne transakcje wyłączające dwóch
+         ostatnich adminów. Samo count(*) tego nie łapie — każda
+         transakcja widziałaby drugiego admina jeszcze aktywnym.
+         Blokada doradcza ustawia je w kolejkę.                    ── */
+  await jakoTrwale(KTO.norbert,
+    `update public.profile set rola='admin' where id=$1`, [KTO.maliwan]);
+
+  const A = new Client(DB), B = new Client(DB);
+  await A.connect(); await B.connect();
+  const jakoAdmin = async k => {
+    await k.query('begin');
+    await k.query('set local role authenticated');
+    await k.query(`select set_config('request.jwt.claims', $1, true)`,
+      [JSON.stringify({ sub: KTO.norbert, role: 'authenticated' })]);
+  };
+  await jakoAdmin(A); await jakoAdmin(B);
+
+  await A.query(`update public.profile set aktywne=false where id=$1`, [KTO.maliwan]);
+  let wynikB = null;
+  const czekaB = B.query(`update public.profile set aktywne=false where id=$1`, [KTO.norbert])
+    .then(() => { wynikB = 'PRZESZŁO'; })
+    .catch(e => { wynikB = e.message.split('\n')[0]; });
+  await new Promise(r => setTimeout(r, 400));
+  const drugaCzeka = wynikB === null;            // stoi na blokadzie
+  await A.query('commit');
+  await czekaB;
+  await B.query('rollback').catch(() => {});
+  await A.end(); await B.end();
+
+  await jakoTrwale(KTO.norbert,
+    `update public.profile set aktywne=true, rola='instruktor' where id=$1`, [KTO.maliwan]);
+  const poWyscigu = await jako(KTO.norbert,
+    `select count(*)::int n from public.profile where rola='admin' and aktywne`);
+
+  sprawdz(16, 'Dwie równoczesne transakcje nie wyłączą dwóch ostatnich administratorów',
+    drugaCzeka && /jedyny aktywny administrator/i.test(wynikB || '') && n(poWyscigu) === 1,
+    `druga transakcja czekała na blokadę: ${drugaCzeka} · wynik: „${wynikB}" · ` +
+    `aktywnych adminów po wszystkim: ${n(poWyscigu)}`);
+
   const zdane = wyniki.filter(w => w.zdal).length;
   console.log(`\n═══ BAZA: ${zdane} / ${wyniki.length} ═══`);
   if (zdane < wyniki.length) {

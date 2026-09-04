@@ -237,9 +237,16 @@ main{flex:1;width:min(1120px,100%);margin:0 auto;padding:26px 20px 80px;
 <div class="szuflada" id="szuflada"><div class="karta tresc" id="szufladaTresc"></div></div>
 <div id="toasty"></div>
 
+<script src="konfig.js"></script>
+<script src="warstwa-danych.js"></script>
 <script>
 const $   = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* Kodujemy też cudzysłowy — te same dane trafiają do atrybutów
+   (data-nazwa, title, placeholder), gdzie sam `<` nie wystarczy. */
+const esc = s => String(s ?? '')
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const rozmiar = b => !b ? '' : b < 1024 ? b + ' B'
   : b < 1048576 ? (b/1024).toFixed(0) + ' KB' : (b/1048576).toFixed(1) + ' MB';
 
@@ -264,19 +271,12 @@ async function zPrzyciskiem(btn, napis, fn){
 }
 
 /* ══ WARSTWA DANYCH ═══════════════════════════════════════════════
-   Na produkcji podmieniana na Supabase — patrz web/dane-supabase.js.  */
-const api = async (sciezka, dane) => {
-  const o = dane ? { method:'POST', headers:{'Content-Type':'application/json'},
-                     body: JSON.stringify(dane) } : {};
-  const r = await fetch(sciezka, o);
-  if (r.status === 401) { location.href = 'index.html'; throw new Error('sesja'); }
-  const d = await r.json().catch(() => ({ blad: 'Zła odpowiedź serwera.' }));
-  if (!r.ok) throw new Error(d.blad || 'Nie udało się wykonać operacji.');
-  return d;
-};
+   Ten ekran NIE WIE, czy dane idą z serwera deweloperskiego, czy
+   z Supabase. Wybiera to `warstwa-danych.js` na podstawie konfig.js
+   i wystawia jako `DANE`. Nie ma tu ani jednego `fetch('/api/…')`. */
 
 let JA = null, KURSY = [], KURS = null,
-    DANE = { lekcje:[], etapy:[], materialy:[], postepy:[] },
+    TRESC = { lekcje:[], etapy:[], materialy:[], postepy:[] },
     AKTYWNY = 0, KONTA = [], PYTANIA = [];
 
 const ZAKLADKI = {
@@ -322,19 +322,19 @@ async function wczytajKurs(k){
   wczytuje($('etapyStan'), 'Wczytuję szkolenie…');
   $('orbita').innerHTML = ''; $('lista').innerHTML = '';
   try {
-    DANE = await api('/api/kurs?id=' + k.id);
+    TRESC = await DANE.kurs(k.id);
   } catch (e) { $('etapyStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
   pusto($('etapyStan'));
   $('tytulKursu').textContent = k.nazwa_pl;
   $('podtytulKursu').textContent =
-    `${k.dni} dni · ${k.godzin} godzin praktyki · ${DANE.etapy.length} etapów`;
+    `${k.dni} dni · ${k.godzin} godzin praktyki · ${TRESC.etapy.length} etapów`;
   rysujWyborKursu(); rysujEtapy(); rysujMaterialyKursanta();
 }
 
-const stanEtapu = id => (DANE.postepy.find(p => p.etap_id === id)?.status) || 'nierozpoczety';
+const stanEtapu = id => (TRESC.postepy.find(p => p.etap_id === id)?.status) || 'nierozpoczety';
 
 function rysujEtapy(){
-  const e = DANE.etapy, n = e.length;
+  const e = TRESC.etapy, n = e.length;
   if (!n){
     $('etapyStan').innerHTML =
       '<div class="karta pusto">Ten kurs nie ma jeszcze opublikowanych etapów.</div>';
@@ -379,7 +379,7 @@ function otworzEtap(x){
   const pyt = (x.pytania||[]).length
     ? `<div class="wiersz"><span class="co">Pytania kontrolne</span><ul class="tekst"
        style="padding-left:18px">${x.pytania.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>` : '';
-  const mat = DANE.materialy.filter(m => m.etap_id === x.id &&
+  const mat = TRESC.materialy.filter(m => m.etap_id === x.id &&
                                     (JA.rola !== 'kursant' || m.opublikowany));
   $('szufladaTresc').innerHTML = `
     <div class="rzad" style="justify-content:space-between">
@@ -407,8 +407,8 @@ function otworzEtap(x){
   const o = $('oznacz');
   if (o) o.onclick = () => zPrzyciskiem(o, 'Zapisuję…', async () => {
     try {
-      const p = await api('/api/postep', { etap_id: x.id, status: gotowy ? 'w_trakcie' : 'zrobione' });
-      DANE.postepy = DANE.postepy.filter(q => q.etap_id !== x.id).concat(p ? [p] : []);
+      const p = await DANE.zapiszPostep(x.id, gotowy ? 'w_trakcie' : 'zrobione');
+      TRESC.postepy = TRESC.postepy.filter(q => q.etap_id !== x.id).concat(p ? [p] : []);
       powiadom(gotowy ? 'Cofnięto oznaczenie.' : 'Etap oznaczony jako zrobiony.');
       rysujEtapy(); otworzEtap(x);
     } catch (e) { powiadom(e.message, 'zle'); }
@@ -422,7 +422,7 @@ function podepnijOtwieranie(zakres){
   zakres.querySelectorAll('[data-otworz]').forEach(b => b.onclick = () =>
     zPrzyciskiem(b, 'Przygotowuję…', async () => {
       try {
-        const d = await api('/api/material/link?id=' + b.dataset.otworz);
+        const d = await DANE.linkDoMaterialu(b.dataset.otworz);
         window.open(d.link, '_blank', 'noopener');
         powiadom('Link ważny przez 5 minut.');
       } catch (e) { powiadom(e.message, 'zle'); }
@@ -430,7 +430,7 @@ function podepnijOtwieranie(zakres){
 }
 
 function rysujMaterialyKursanta(){
-  const m = DANE.materialy.filter(x => JA.rola === 'kursant' ? x.opublikowany : true);
+  const m = TRESC.materialy.filter(x => JA.rola === 'kursant' ? x.opublikowany : true);
   $('materialy').innerHTML = m.length
     ? `<div class="siatka">${m.map(x => `<div class="karta mat">
          <div class="rzad"><span class="plakietka">${esc(x.typ)}</span>
@@ -449,7 +449,7 @@ async function rysujKursantow(){
   const el = $('tabKursanci');
   el.innerHTML = '<tr><td class="pusto"><span class="kreci"></span></td></tr>';
   try {
-    const k = await api('/api/kursanci');
+    const k = await DANE.kursanci();
     el.innerHTML = k.length ? `
       <tr><th>Kursant</th><th>E-mail</th><th>Kurs</th><th>Postęp</th></tr>` +
       k.map(x => { const proc = x.etapow ? Math.round(100*x.zrobione/x.etapow) : 0;
@@ -474,16 +474,12 @@ $('mDodaj').onclick = () => zPrzyciskiem($('mDodaj'), 'Wgrywam…', async () => 
   if (!plik)  return powiadom('Najpierw wybierz plik z komputera.', 'zle');
   if (!nazwa) return powiadom('Podaj nazwę materiału.', 'zle');
   if (plik.size > 25*1024*1024) return powiadom('Plik jest za duży. Limit to 25 MB.', 'zle');
-  const q = new URLSearchParams({ kurs_id: $('mKurs').value, typ: $('mTyp').value,
-                                  nazwa, plik: plik.name });
   try {
-    const r = await fetch('/api/material/plik?' + q, {
-      method: 'POST',
-      headers: { 'Content-Type': plik.type || 'application/octet-stream' },
-      body: plik });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.blad || 'Nie udało się wgrać pliku.');
-    powiadom(`Wgrane: ${d.material.nazwa_pl}. Kursanci zobaczą po opublikowaniu.`);
+    // Ta sama funkcja i ten sam argument (prawdziwy obiekt pliku)
+    // lokalnie i na produkcji. Różni się tylko to, co siedzi pod spodem.
+    const m = await DANE.wgrajMaterial({ kurs_id: $('mKurs').value, typ: $('mTyp').value,
+                                         nazwa, plik });
+    powiadom(`Wgrane: ${m.nazwa_pl}. Kursanci zobaczą po opublikowaniu.`);
     $('mNazwa').value = ''; $('mPlik').value = ''; $('mPlikNapis').textContent = 'Wybierz plik…';
     rysujMaterialy();
   } catch (e) { powiadom(e.message, 'zle'); }
@@ -496,7 +492,7 @@ async function rysujMaterialy(){
   const wsz = [];
   try {
     for (const k of KURSY){
-      const d = await api('/api/kurs?id=' + k.id);
+      const d = await DANE.kurs(k.id);
       d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa_pl }));
     }
   } catch (e) { $('matStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
@@ -524,7 +520,7 @@ async function rysujMaterialy(){
   $('tabMaterialy').querySelectorAll('[data-pub]').forEach(b => b.onclick = () =>
     zPrzyciskiem(b, '…', async () => {
       try {
-        await api('/api/material/publikuj', { id: b.dataset.pub, opublikowany: b.dataset.stan !== 'true' });
+        await DANE.publikujMaterial(b.dataset.pub, b.dataset.stan !== 'true');
         powiadom(b.dataset.stan === 'true' ? 'Materiał ukryty.' : 'Materiał opublikowany.');
         rysujMaterialy();
       } catch (e) { powiadom(e.message, 'zle'); }
@@ -532,7 +528,7 @@ async function rysujMaterialy(){
   $('tabMaterialy').querySelectorAll('[data-usun]').forEach(b => b.onclick = async () => {
     if (!confirm(`Usunąć materiał „${b.dataset.nazwa}" razem z plikiem?`)) return;
     zPrzyciskiem(b, '…', async () => {
-      try { await api('/api/material/usun', { id: b.dataset.usun });
+      try { await DANE.usunMaterial(b.dataset.usun);
             powiadom('Materiał usunięty.'); rysujMaterialy(); }
       catch (e) { powiadom(e.message, 'zle'); }
     });
@@ -544,7 +540,7 @@ async function rysujPytania(){
   $('zadajBlok').style.display = JA.rola === 'kursant' ? '' : 'none';
   wczytuje($('pytStan'), 'Wczytuję pytania…');
   $('pytania').innerHTML = '';
-  try { PYTANIA = await api('/api/pytania'); }
+  try { PYTANIA = await DANE.pytania(); }
   catch (e) { $('pytStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
   pusto($('pytStan'));
   odswiezLicznik();
@@ -572,14 +568,14 @@ async function rysujPytania(){
     zPrzyciskiem(b, 'Zapisuję…', async () => {
       const pole = $('pytania').querySelector(`[data-odp="${b.dataset.zapisz}"]`);
       try {
-        await api('/api/pytanie/odpowiedz', { id: b.dataset.zapisz, odpowiedz: pole.value });
+        await DANE.odpowiedzNaPytanie(b.dataset.zapisz, pole.value);
         powiadom('Odpowiedź zapisana. Kursant już ją widzi.');
         rysujPytania();
       } catch (e) { powiadom(e.message, 'zle'); }
     }));
   $('pytania').querySelectorAll('[data-zamknij]').forEach(b => b.onclick = () =>
     zPrzyciskiem(b, '…', async () => {
-      try { await api('/api/pytanie/zamknij', { id: b.dataset.zamknij });
+      try { await DANE.zamknijPytanie(b.dataset.zamknij);
             powiadom('Pytanie zamknięte.'); rysujPytania(); }
       catch (e) { powiadom(e.message, 'zle'); }
     }));
@@ -598,7 +594,7 @@ $('wyslijPytanie').onclick = () => zPrzyciskiem($('wyslijPytanie'), 'Wysyłam…
   if (!t)    return powiadom('Napisz treść pytania.', 'zle');
   if (!KURS) return powiadom('Najpierw otwórz swoje szkolenie.', 'zle');
   try {
-    await api('/api/pytanie', { kurs_id: KURS.id, tresc: t });
+    await DANE.zadajPytanie(KURS.id, null, t);
     $('trescPytania').value = '';
     powiadom('Pytanie wysłane do Maliwan.');
     rysujPytania();
@@ -608,20 +604,24 @@ $('wyslijPytanie').onclick = () => zPrzyciskiem($('wyslijPytanie'), 'Wysyłam…
 /* ══ KONTA (admin) ═══════════════════════════════════════════════ */
 $('zWyslij').onclick = () => zPrzyciskiem($('zWyslij'), 'Wysyłam…', async () => {
   try {
-    const d = await api('/api/zapros', { imie: $('zImie').value, email: $('zEmail').value,
-                                         rola: $('zRola').value });
+    const d = await DANE.zapros({ imie: $('zImie').value, email: $('zEmail').value,
+                                  rola: $('zRola').value });
     $('zImie').value = ''; $('zEmail').value = '';
     powiadom(`Zaproszenie dla ${d.zaproszenie.imie} utworzone.`);
+    // Link na ekranie istnieje TYLKO lokalnie, bo tu nie ma poczty.
+    // Na produkcji wiadomość wysyła Supabase i pola `link_lokalny` nie ma.
     $('zWynik').innerHTML = `<div class="karta blok" style="gap:8px">
-      <span class="etykieta">Link dla ${esc(d.zaproszenie.email)}</span>
-      <code style="font-size:12px;word-break:break-all;color:var(--gold)">${esc(d.link_lokalny)}</code>
-      <span class="cicho">${esc(d.uwaga)}</span></div>`;
+      <span class="etykieta">Zaproszenie dla ${esc(d.zaproszenie.email)}</span>
+      ${d.link_lokalny
+        ? `<code style="font-size:12px;word-break:break-all;color:var(--gold)">${esc(d.link_lokalny)}</code>`
+        : ''}
+      <span class="cicho">${esc(d.uwaga || '')}</span></div>`;
   } catch (e) { powiadom(e.message, 'zle'); }
 });
 
 async function rysujKonta(){
   wczytuje($('kontaStan'), 'Wczytuję konta…'); $('tabKonta').innerHTML = '';
-  try { KONTA = await api('/api/konta'); }
+  try { KONTA = await DANE.konta(); }
   catch (e) { $('kontaStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
   pusto($('kontaStan'));
   $('tabKonta').innerHTML = `
@@ -637,15 +637,14 @@ async function rysujKonta(){
       <td><button class="przycisk cichy" data-akt="${k.id}" data-stan="${k.aktywne}">
         ${k.aktywne ? 'Wyłącz' : 'Włącz'}</button></td></tr>`).join('');
   $('tabKonta').querySelectorAll('[data-rola]').forEach(s => s.onchange = async () => {
-    try { const r = await api('/api/konto/rola', { id: s.dataset.rola, rola: s.value });
+    try { const r = await DANE.zmienRole(s.dataset.rola, s.value);
           powiadom(`${r.imie} — rola zmieniona na ${r.rola}.`); }
     catch (e) { powiadom(e.message, 'zle'); }
     rysujKonta();
   });
   $('tabKonta').querySelectorAll('[data-akt]').forEach(b => b.onclick = () =>
     zPrzyciskiem(b, '…', async () => {
-      try { const r = await api('/api/konto/aktywne',
-              { id: b.dataset.akt, aktywne: b.dataset.stan !== 'true' });
+      try { const r = await DANE.ustawAktywne(b.dataset.akt, b.dataset.stan !== 'true');
             powiadom(`${r.imie} — konto ${r.aktywne ? 'włączone' : 'wyłączone'}.`); }
       catch (e) { powiadom(e.message, 'zle'); }
       rysujKonta();
@@ -654,13 +653,13 @@ async function rysujKonta(){
 
 /* ══ PRZYPISANIA (admin) ═════════════════════════════════════════ */
 async function rysujPrzypisania(){
-  if (!KONTA.length) KONTA = await api('/api/konta');
+  if (!KONTA.length) KONTA = await DANE.konta();
   $('pKursant').innerHTML = KONTA.filter(k => k.rola === 'kursant' && k.aktywne)
     .map(k => `<option value="${k.id}">${esc(k.imie)} — ${esc(k.email)}</option>`).join('');
   $('pKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
   const el = $('tabPrzypisania');
   el.innerHTML = '<tr><td class="pusto"><span class="kreci"></span></td></tr>';
-  const k = await api('/api/kursanci');
+  const k = await DANE.kursanci();
   el.innerHTML = k.length ? `
     <tr><th>Kursant</th><th>Kurs</th><th></th></tr>` +
     k.map(x => `<tr><td>${esc(x.imie)}</td><td>${esc(x.kurs)}</td>
@@ -669,28 +668,30 @@ async function rysujPrzypisania(){
     : '<tr><td class="pusto">Nikt nie jest jeszcze przypisany.</td></tr>';
   el.querySelectorAll('[data-odepnij]').forEach(b => b.onclick = () =>
     zPrzyciskiem(b, '…', async () => {
-      try { await api('/api/odepnij', { kursant_id: b.dataset.odepnij, kurs_id: b.dataset.kurs });
+      try { await DANE.odepnij(b.dataset.kurs, b.dataset.odepnij);
             powiadom('Kursant odpięty od kursu.'); rysujPrzypisania(); }
       catch (e) { powiadom(e.message, 'zle'); }
     }));
 }
 $('pDodaj').onclick = () => zPrzyciskiem($('pDodaj'), 'Przypisuję…', async () => {
-  try { await api('/api/przypisz', { kursant_id: $('pKursant').value, kurs_id: $('pKurs').value });
+  try { await DANE.przypisz($('pKurs').value, $('pKursant').value);
         powiadom('Kursant przypisany do kursu.'); rysujPrzypisania(); }
   catch (e) { powiadom(e.message, 'zle'); }
 });
 
 /* ══ WYLOGOWANIE ═════════════════════════════════════════════════ */
-$('wyloguj').onclick = async () => {
-  await fetch('/api/wylogowanie', { method:'POST' });
+/* Lokalnie kasuje sesję na serwerze, na produkcji unieważnia token
+   w Supabase Auth. Jedno wywołanie, dwa różne mechanizmy pod spodem. */
+$('wyloguj').onclick = () => zPrzyciskiem($('wyloguj'), 'Wylogowuję…', async () => {
+  try { await DANE.wyloguj(); } catch (e) { powiadom(e.message, 'zle'); return; }
   location.href = 'index.html';
-};
+});
 
 /* ══ START ═══════════════════════════════════════════════════════ */
 (async () => {
-  let d;
-  try { d = await api('/api/ja'); } catch { return; }
-  JA = d.profil;
+  await window.GOTOWE;
+  JA = await DANE.ja();
+  if (!JA) { location.href = 'index.html'; return; }
   $('imie').textContent = JA.imie;
   $('rola').textContent = JA.rola;
   $('rola').className = 'plakietka ' + JA.rola;
@@ -698,7 +699,7 @@ $('wyloguj').onclick = async () => {
     .map(([k,n]) => `<button data-w="${k}">${n}</button>`).join('');
   $('menu').querySelectorAll('button').forEach(b => b.onclick = () => pokaz(b.dataset.w));
 
-  KURSY = await api('/api/kursy');
+  KURSY = await DANE.kursy();
   await wczytajKurs(KURSY[0] || null);
   pokaz((location.hash || '#szkolenie').slice(1));
 })();

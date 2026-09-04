@@ -8,10 +8,12 @@
   "private": true,
   "scripts": {
     "start": "node serwer/dev.js",
-    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js",
+    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js",
     "testy:baza": "node testy/bezpieczenstwo.js",
     "testy:http": "node testy/http.js",
     "testy:import": "node testy/import.js",
-    "import": "python3 db/import_xlsx.py AsterA_Coach_Baza_Tresci.xlsx > db/05_import.sql"
+    "import": "python3 db/import_xlsx.py AsterA_Coach_Baza_Tresci.xlsx > db/05_import.sql",
+    "testy:kontrakty": "node testy/kontrakty.js",
+    "konfig": "node narzedzia/zbuduj-konfig.js"
   }
 }

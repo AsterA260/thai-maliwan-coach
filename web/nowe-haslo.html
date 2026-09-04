@@ -59,18 +59,17 @@ label{display:flex;flex-direction:column;gap:7px;font-size:12px;letter-spacing:1
       Wróć do logowania</a></p>
 </div>
 
+<script src="konfig.js"></script>
+<script src="warstwa-danych.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const parametry = new URLSearchParams(location.search);
-const ZAPROSZENIE = parametry.get('zaproszenie');
-const RESET       = parametry.get('token') || location.hash.includes('access_token');
 
-if (ZAPROSZENIE){
-  $('tytul').textContent = 'Ustaw hasło do nowego konta';
-  $('podtytul').textContent =
-    'Konto zostało dla Ciebie założone przez szkołę. Wybierz hasło i zaloguj się.';
-}
-
+/* JEDEN wariant linku — zgodny z Supabase.
+   Zaproszenie i reset hasła prowadzą pod ten sam adres, a Supabase
+   dokleja do niego fragment `#access_token=…&type=invite|recovery`.
+   Klient zakłada z niego sesję, więc dalej oba przypadki są takie same:
+   wystarczy zapisać nowe hasło. Nie ma tu żadnego własnego tokenu
+   w adresie — token z poczty obsługuje wyłącznie Supabase Auth. */
 function pokaz(tekst, rodzaj){
   const k = $('komunikat');
   k.className = 'komunikat widac ' + rodzaj;
@@ -98,29 +97,35 @@ $('formularz').addEventListener('submit', async e => {
 
   $('wyslij').disabled = true; $('wyslij').textContent = 'Zapisuję…';
   try {
-    /* PRODUKCJA (Supabase):
-         zaproszenie → supabase.auth.verifyOtp({ token_hash, type:'invite' })
-                       potem supabase.auth.updateUser({ password: h })
-         reset hasła → link z e-maila loguje sesję odzyskiwania,
-                       potem supabase.auth.updateUser({ password: h })
-       Podłącza to web/dane-supabase.js (funkcje `przyjmijZaproszenie`
-       i `ustawHaslo`). Lokalnie nie ma warstwy Auth, więc pokazujemy,
-       co się wydarzy — bez udawania, że hasło zostało zapisane.       */
-    if (window.DANE_SUPABASE) {
-      if (ZAPROSZENIE) await window.DANE_SUPABASE.przyjmijZaproszenie(ZAPROSZENIE, h);
-      else             await window.DANE_SUPABASE.ustawHaslo(h);
-      pokaz('Hasło zapisane. Za chwilę przeniesiemy Cię do logowania.', 'ok');
-      setTimeout(() => location.href = 'index.html', 1600);
-    } else {
-      pokaz('Wersja lokalna nie ma warstwy Auth — hasłami zarządza Supabase. '
-          + 'Ten ekran działa w pełni dopiero po podpięciu projektu Supabase.', 'zle');
-    }
+    await window.GOTOWE;
+    await DANE.ustawHaslo(h);
+    pokaz('Hasło zapisane. Za chwilę przeniesiemy Cię do logowania.', 'ok');
+    setTimeout(() => location.href = 'index.html', 1600);
   } catch (err) {
     pokaz(err.message || 'Nie udało się zapisać hasła. Link mógł wygasnąć.', 'zle');
   } finally {
     $('wyslij').disabled = false; $('wyslij').textContent = 'Zapisz hasło';
   }
 });
+
+/* Start: czekamy, aż klient przerobi fragment adresu na sesję. */
+(async () => {
+  await window.GOTOWE;
+  const stan = await DANE.sesjaZLinku();
+  if (stan.typ === 'invite'){
+    $('tytul').textContent = 'Ustaw hasło do nowego konta';
+    $('podtytul').textContent =
+      'Konto zostało dla Ciebie założone przez szkołę. Wybierz hasło i zaloguj się.';
+  }
+  if (!stan.jest){
+    pokaz(window.TRYB === 'lokalny'
+      ? 'Wersja lokalna nie ma warstwy Auth — hasłami zarządza Supabase Auth. '
+        + 'Ten ekran działa w pełni po podpięciu projektu Supabase.'
+      : 'Ten adres trzeba otworzyć z linku, który przyszedł pocztą. '
+        + 'Jeśli link wygasł, poproś o nowy przez „Ustaw nowe" na ekranie logowania.', 'zle');
+    $('wyslij').disabled = true;
+  }
+})();
 </script>
 </body>
 </html>

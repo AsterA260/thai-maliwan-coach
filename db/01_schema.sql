@@ -279,6 +279,25 @@ drop trigger if exists postep_spojnosc on public.postep;
 create trigger postep_spojnosc before insert or update on public.postep
   for each row execute function public.sprawdz_postep();
 
+-- ── Ochrona ostatniego administratora — bez wyścigu ───────────────
+--  Samo `count(*)` nie wystarcza: dwie równoczesne transakcje, każda
+--  wyłączająca innego z dwóch ostatnich adminów, widziałyby po jednym
+--  pozostałym i obie przeszłyby. Blokada doradcza ustawia je w kolejkę,
+--  więc druga liczy JUŻ PO zatwierdzeniu pierwszej i dostaje odmowę.
+--  Blokadę bierzemy dopiero wtedy, gdy zmiana naprawdę dotyka admina,
+--  żeby nie serializować zwykłych aktualizacji profilu.
+create or replace function public.zablokuj_licznik_adminow()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform pg_advisory_xact_lock(hashtext('astera_coach_ostatni_admin')::bigint);
+end $$;
+
+create or replace function public.ilu_innych_aktywnych_adminow(p_pomin uuid)
+returns bigint language sql stable security definer set search_path = public as $$
+  select count(*) from public.profile
+   where rola = 'admin' and aktywne and id <> p_pomin
+$$;
+
 -- ── Profil: nikt sam sobie nie zmieni e-maila, roli ani aktywności ─
 create or replace function public.chron_profil()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -286,11 +305,12 @@ begin
   if public.jestem_adminem() then
     -- ostatni aktywny administrator nie może zostać wyłączony ani zdegradowany
     if (old.rola = 'admin' and old.aktywne)
-       and (new.rola <> 'admin' or new.aktywne = false)
-       and (select count(*) from public.profile
-             where rola = 'admin' and aktywne and id <> old.id) = 0 then
-      raise exception 'To jedyny aktywny administrator — nie mozna go wylaczyc ani zdegradowac.'
-        using errcode = '42501';
+       and (new.rola <> 'admin' or new.aktywne = false) then
+      perform public.zablokuj_licznik_adminow();
+      if public.ilu_innych_aktywnych_adminow(old.id) = 0 then
+        raise exception 'To jedyny aktywny administrator — nie mozna go wylaczyc ani zdegradowac.'
+          using errcode = '42501';
+      end if;
     end if;
     return new;
   end if;
@@ -309,11 +329,12 @@ create trigger profil_ochrona before update on public.profile
 create or replace function public.chron_ostatniego_admina()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if old.rola = 'admin' and old.aktywne
-     and (select count(*) from public.profile
-           where rola = 'admin' and aktywne and id <> old.id) = 0 then
-    raise exception 'To jedyny aktywny administrator — nie mozna go usunac.'
-      using errcode = '42501';
+  if old.rola = 'admin' and old.aktywne then
+    perform public.zablokuj_licznik_adminow();
+    if public.ilu_innych_aktywnych_adminow(old.id) = 0 then
+      raise exception 'To jedyny aktywny administrator — nie mozna go usunac.'
+        using errcode = '42501';
+    end if;
   end if;
   return old;
 end $$;
@@ -321,3 +342,57 @@ end $$;
 drop trigger if exists profil_ostatni_admin on public.profile;
 create trigger profil_ostatni_admin before delete on public.profile
   for each row execute function public.chron_ostatniego_admina();
+
+-- ═══════════════════════════════════════════════════════════════════
+--  WIDOK KURSANTÓW — jedno źródło liczb dla obu warstw danych
+--
+--  Serwer deweloperski i adapter Supabase czytają dokładnie ten sam
+--  widok, więc `zrobione` i `etapow` nie mogą się rozjechać między
+--  wersją lokalną a produkcyjną. `security_invoker` sprawia, że widok
+--  działa w uprawnieniach pytającego — czyli obowiązuje RLS tabel pod
+--  spodem, a nie prawa właściciela widoku.
+-- ═══════════════════════════════════════════════════════════════════
+create or replace view public.widok_kursanci
+with (security_invoker = true) as
+select
+  pr.id, pr.imie, pr.email,
+  k.nazwa_pl as kurs,
+  k.id       as kurs_id,
+  (select count(*)::int from public.postep po
+     join public.etap e   on e.id = po.etap_id
+     join public.lekcja l on l.id = e.lekcja_id
+    where po.kursant_id = pr.id and l.kurs_id = k.id and po.status = 'zrobione') as zrobione,
+  (select count(*)::int from public.etap e
+     join public.lekcja l on l.id = e.lekcja_id
+    where l.kurs_id = k.id) as etapow
+from public.przypisanie z
+join public.profile pr on pr.id = z.kursant_id
+join public.kurs    k  on k.id  = z.kurs_id
+where z.aktywne;
+
+comment on view public.widok_kursanci is
+  'Kursanci z postepem. Ten sam kontrakt dla serwera dev i dla Supabase.';
+
+-- ═══════════════════════════════════════════════════════════════════
+--  WYZWALACZ NOWEGO KONTA — część migracji, nie ręczny krok
+--
+--  Audyt słusznie zauważył, że instrukcja kazała dokleić ten wyzwalacz
+--  ręcznie w panelu. Teraz zakłada go sama migracja, idempotentnie.
+--  Lokalnie auth.users tworzy db/00_supabase_lokalnie.sql, na Supabase
+--  istnieje od zawsze. Gdyby zabrakło uprawnień — mówimy o tym wprost,
+--  zamiast po cichu zostawić system bez profili.
+-- ═══════════════════════════════════════════════════════════════════
+do $$
+begin
+  if exists (select 1 from information_schema.tables
+              where table_schema = 'auth' and table_name = 'users') then
+    execute 'drop trigger if exists na_nowego_uzytkownika on auth.users';
+    execute 'create trigger na_nowego_uzytkownika after insert on auth.users
+               for each row execute function public.obsluz_nowego_uzytkownika()';
+    raise notice 'Wyzwalacz na_nowego_uzytkownika zalozony na auth.users.';
+  else
+    raise warning 'Brak tabeli auth.users — wyzwalacz na_nowego_uzytkownika NIE zostal zalozony.';
+  end if;
+exception when insufficient_privilege then
+  raise warning 'Brak uprawnien do auth.users — wyzwalacz na_nowego_uzytkownika NIE zostal zalozony.';
+end $$;

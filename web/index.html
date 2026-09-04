@@ -58,7 +58,7 @@ label{display:flex;flex-direction:column;gap:7px;font-size:12px;letter-spacing:1
     Nie masz konta? Napisz do nas: <a href="mailto:akademia@thaimaliwan.pl">akademia@thaimaliwan.pl</a>
   </p>
 
-  <div class="karta demo">
+  <div class="karta demo" id="demo" hidden>
     <b>Konta demonstracyjne (tylko lokalnie)</b><br>
     <code>norbert@thaimaliwan.pl</code> / <code>demo-norbert</code> — administrator<br>
     <code>maliwan@thaimaliwan.pl</code> / <code>demo-maliwan</code> — instruktor<br>
@@ -67,6 +67,8 @@ label{display:flex;flex-direction:column;gap:7px;font-size:12px;letter-spacing:1
   </div>
 </div>
 
+<script src="konfig.js"></script>
+<script src="warstwa-danych.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 function pokazBlad(t){ const k=$('komunikat'); k.textContent=t; k.classList.add('widac'); }
@@ -76,25 +78,39 @@ $('formularz').addEventListener('submit', async e => {
   $('komunikat').classList.remove('widac');
   $('wyslij').disabled = true; $('wyslij').textContent = 'Sprawdzam…';
   try{
-    const r = await fetch('/api/logowanie', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email: $('email').value.trim(), haslo: $('haslo').value })
-    });
-    const d = await r.json();
-    if (!r.ok) { pokazBlad(d.blad || 'Nie udało się zalogować.'); return; }
+    await window.GOTOWE;
+    await DANE.zaloguj($('email').value.trim(), $('haslo').value);
     location.href = 'app.html';
-  } catch { pokazBlad('Brak połączenia z serwerem. Spróbuj jeszcze raz.'); }
+  } catch (err) { pokazBlad(err.message || 'Nie udało się zalogować.'); }
   finally { $('wyslij').disabled = false; $('wyslij').textContent = 'Zaloguj się'; }
 });
 
-$('reset').addEventListener('click', e => {
+/* „Ustaw nowe" naprawdę wysyła wiadomość — na produkcji robi to
+   Supabase Auth. Lokalnie warstwa danych mówi wprost, że poczty nie ma. */
+$('reset').addEventListener('click', async e => {
   e.preventDefault();
-  pokazBlad('Odzyskiwanie hasła obsługuje Supabase Auth — wyśle link na Twój adres. '
-          + 'W wersji lokalnej hasło zmienia administrator.');
+  const adres = $('email').value.trim();
+  if (!adres) return pokazBlad('Najpierw wpisz swój adres e-mail — wyślemy na niego link.');
+  const a = $('reset'); const napis = a.textContent;
+  a.textContent = 'Wysyłam…';
+  try {
+    await window.GOTOWE;
+    await DANE.wyslijLinkResetu(adres);
+    const k = $('komunikat');
+    k.textContent = `Jeśli konto ${adres} istnieje, wysłaliśmy na nie link do ustawienia hasła. ` +
+                    'Sprawdź pocztę, także folder ze spamem.';
+    k.style.borderColor = 'var(--ok)'; k.style.color = '#D7EADD';
+    k.classList.add('widac');
+  } catch (err) { pokazBlad(err.message); }
+  finally { a.textContent = napis; }
 });
 
 // jeśli sesja jest ważna, nie pokazuj logowania
-fetch('/api/ja').then(r => { if (r.ok) location.href = 'app.html'; }).catch(()=>{});
+(async () => {
+  await window.GOTOWE;
+  $('demo').hidden = window.TRYB !== 'lokalny';
+  if (await DANE.ja()) location.href = 'app.html';
+})();
 </script>
 </body>
 </html>
