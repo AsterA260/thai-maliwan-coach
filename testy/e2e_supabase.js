@@ -19,11 +19,18 @@
  * i kasowania kont testowych. Skrypt **nigdy go nie wypisuje** — w raporcie
  * widać wyłącznie rodzaj klucza (`sb_secret_…` albo `eyJ…`).
  *
- * DANE. Wyłącznie konta na domenie `E2E_DOMENA` (domyślnie
- * `e2e.przyklad.pl`). Żadnych prawdziwych kursantów. Sprzątanie wykonuje
- * się także po błędzie i po przerwaniu skryptu (Ctrl+C).
+ * DANE. Wyłącznie konta testowe, żadnych prawdziwych kursantów.
+ * Adresy, hasło i skrzynka pochodzą **wyłącznie z `.env`** — w kodzie
+ * nie ma ani jednej wartości domyślnej. Bez nich skrypt kończy się
+ * ZANIM założy jakiekolwiek konto. Sprzątanie wykonuje się także po
+ * błędzie i po przerwaniu skryptu (Ctrl+C).
  *
- * KONTO ADMINISTRATORA JEST TRWAŁE. Powstaje raz, pod stałym adresem,
+ * POCZTA. `E2E_SKRZYNKA` to prawdziwy adres, który potrafisz otworzyć.
+ * Konta, które mają dostać wiadomość (zaproszenia), zakładane są jako
+ * adresy z plusem na tej skrzynce — dzięki temu reset i zaproszenie
+ * naprawdę dolatują i da się zamknąć A4, A5 i E3.
+ *
+ * KONTO ADMINISTRATORA JEST TRWAŁE. Powstaje raz, pod adresem z `.env`,
  * i NIE jest kasowane — bo rolę `admin` nadaje mu człowiek w SQL Editorze
  * (patrz sekcja „PIERWSZY ADMINISTRATOR" niżej). Kasowanie go po każdym
  * przebiegu oznaczałoby ręczny krok przed każdym uruchomieniem.
@@ -71,19 +78,67 @@ const PUBL   = env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || '';
 const SEKR   = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
 const ADRES  = (env.ADRES_APLIKACJI || 'http://127.0.0.1:8910').replace(/\/+$/, '');
 const BUCKET = env.SUPABASE_BUCKET || 'materialy';
-const DOMENA = env.E2E_DOMENA || 'e2e.przyklad.pl';
-const HASLO  = env.E2E_HASLO  || 'e2e-Trwale-Haslo-Testowe-9';
-const E_ADMIN = env.E2E_ADMIN || `e2e-admin@${DOMENA}`;    // stały adres, nie kasowany
 const OBCY_ADRES = 'https://zupelnie-obcy-adres.example/przejmij';
+
+/* ── DANE TESTOWE — wszystkie z .env, żadnych wartości w kodzie ────
+   Adres i hasło trwałego administratora NIE mają wartości domyślnych.
+   Hasło w kodzie źródłowym to hasło opublikowane; adres w kodzie to
+   adres, który ktoś kiedyś założy na cudzym projekcie nieświadomie.
+   Brak którejkolwiek z tych wartości = koniec, ZANIM powstanie
+   jakiekolwiek konto.
+
+   E2E_SKRZYNKA to PRAWDZIWY adres, który potrafisz otworzyć. Z niego
+   robimy adresy z plusem (`ktos+e2e-kursant-…@domena`), więc wiadomości
+   z resetu i zaproszenia naprawdę gdzieś dolatują i da się zamknąć
+   scenariusze A4, A5 i E3. Fikcyjna domena do tego nie wystarcza.  */
+const E_ADMIN   = (env.E2E_ADMIN   || '').trim();
+const HASLO     = (env.E2E_HASLO   || '').trim();
+const SKRZYNKA  = (env.E2E_SKRZYNKA || '').trim();
+const DOMENA    = (env.E2E_DOMENA  || '').trim();     // dla kont, które nie dostają poczty
 
 const rodzajKlucza = k => k.startsWith('sb_publishable_') ? 'sb_publishable_… (nowy)'
                         : k.startsWith('sb_secret_')      ? 'sb_secret_… (nowy)'
                         : k.startsWith('eyJ')             ? 'eyJ… (legacy JWT)' : 'nieznany';
 
-if (!URL_B || !PUBL || !SEKR) {
-  console.error('Brakuje SUPABASE_URL, klucza publicznego albo sekretnego w .env.');
+const braki = [];
+if (!URL_B)    braki.push('SUPABASE_URL');
+if (!PUBL)     braki.push('SUPABASE_PUBLISHABLE_KEY (albo SUPABASE_ANON_KEY)');
+if (!SEKR)     braki.push('SUPABASE_SECRET_KEY (albo SUPABASE_SERVICE_ROLE_KEY)');
+if (!E_ADMIN)  braki.push('E2E_ADMIN — adres trwałego konta administratora testowego');
+if (!HASLO)    braki.push('E2E_HASLO — hasło kont testowych');
+if (!SKRZYNKA) braki.push('E2E_SKRZYNKA — prawdziwy adres, do którego masz dostęp');
+
+if (braki.length) {
+  console.error('\nBrakuje w .env:\n');
+  for (const b of braki) console.error('  · ' + b);
+  console.error('\nUzupełnij .env (wzór w .env.example) i uruchom ponownie.');
+  console.error('Nie zakładam żadnego konta, dopóki tych wartości nie ma.\n');
   process.exit(2);
 }
+if (HASLO.length < 12) {
+  console.error('E2E_HASLO ma mniej niż 12 znaków. Ustaw dłuższe — Supabase i tak może odrzucić krótkie.');
+  process.exit(2);
+}
+if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(SKRZYNKA)) {
+  console.error(`E2E_SKRZYNKA („${SKRZYNKA}") nie wygląda na adres e-mail.`);
+  process.exit(2);
+}
+
+/** Adres z plusem na prawdziwej skrzynce — poczta dolatuje pod adres
+    główny, a każdy przebieg ma własny, rozpoznawalny wariant. */
+function zPlusem(etykieta) {
+  const [lokalna, domena] = SKRZYNKA.split('@');
+  return `${lokalna.split('+')[0]}+e2e-${etykieta}-${Date.now().toString(36)}@${domena}`;
+}
+
+/** Adres dla konta, które nigdy nie dostaje poczty (kursanci, obcy).
+    Gdy E2E_DOMENA nie jest ustawiona — też idzie na skrzynkę z plusem. */
+const kontoBezPoczty = etykieta => DOMENA
+  ? `e2e-${etykieta}-${Date.now().toString(36)}@${DOMENA}`
+  : zPlusem(etykieta);
+
+const adminNaPrawdziwejSkrzynce =
+  E_ADMIN.split('@')[1]?.toLowerCase() === SKRZYNKA.split('@')[1]?.toLowerCase();
 
 /* ══ POMOCNIKI HTTP ═══════════════════════════════════════════════ */
 async function zapytaj(sciezka, { metoda = 'GET', token, klucz = PUBL, dane,
@@ -145,7 +200,6 @@ process.on('SIGINT',  () => { przerwij('SIGINT'); });
 process.on('SIGTERM', () => { przerwij('SIGTERM'); });
 
 /* ══ KONTA TESTOWE ════════════════════════════════════════════════ */
-const konto = rola => `e2e-${rola}-${Date.now().toString(36)}@${DOMENA}`;
 
 async function znajdzKonto(email) {
   const r = await zapytaj(`/auth/v1/admin/users?filter=${encodeURIComponent(email)}`,
@@ -248,10 +302,18 @@ async function przebieg() {
   console.log('\n═══ E2E NA ŻYWYM SUPABASE ═══');
   console.log(`projekt: ${URL_B}`);
   console.log(`klucz publiczny: ${rodzajKlucza(PUBL)} · sekretny: ${rodzajKlucza(SEKR)}`);
-  console.log(`konta testowe na domenie: @${DOMENA}\n`);
+  console.log(`skrzynka testowa: ${SKRZYNKA} (adresy z plusem)`);
+  console.log(`konto administratora: ${E_ADMIN}` +
+              (adminNaPrawdziwejSkrzynce ? '' : '  ← UWAGA: inna domena niż skrzynka'));
+  if (!adminNaPrawdziwejSkrzynce)
+    console.log('  wiadomości resetu (A4) mogą nie dolecieć — rozważ adres z plusem na E2E_SKRZYNKA');
+  console.log('');
 
   /* ── konta ──────────────────────────────────────────────────── */
-  const eInstr = konto('instr'), eKurs = konto('kursant'), eObcy = konto('obcy');
+  const eInstr = kontoBezPoczty('instr');
+  const eKurs  = kontoBezPoczty('kursant');
+  const eObcy  = kontoBezPoczty('obcy');
+
   const idAdmin = await zalozKonto(E_ADMIN, 'E2E Admin', { trwale: true });
   await zalozKonto(eInstr, 'E2E Instruktorka');
   await zalozKonto(eKurs,  'E2E Kursant');
@@ -261,8 +323,7 @@ async function przebieg() {
      Rola `admin` NIE jest nadawana kluczem sekretnym. Ten klucz omija
      RLS, ale nie ma tożsamości (`auth.uid()` puste), więc wyzwalacz
      `chron_profil` i tak cofnąłby zmianę — a próba obejścia tego byłaby
-     obchodzeniem własnego zabezpieczenia. Automat zatrzymuje się
-     i podaje jedną komendę do SQL Editora.                          */
+     obchodzeniem własnego zabezpieczenia.                            */
   const profilAdmina = await zapytaj(
     `/rest/v1/profile?id=eq.${idAdmin}&select=email,rola,aktywne`, { klucz: SEKR, token: SEKR });
   const jestAdminem = /"rola":"admin"/.test(profilAdmina.tekst);
@@ -277,9 +338,9 @@ async function przebieg() {
     console.log('─────────────────────────────────────────────────────────');
     throw Object.assign(new Error('Brak pierwszego administratora'), { zatrzymanie: true });
   }
-  console.log(`konto administratora ma rolę admin — potwierdzone w bazie: ${skrot(profilAdmina.tekst)}\n`);
+  console.log(`rola admin potwierdzona w bazie: ${skrot(profilAdmina.tekst)}\n`);
 
-  /* ══ AUTH ══════════════════════════════════════════════════════ */
+  /* ══ AUTH — logowanie, odświeżanie, wylogowanie ════════════════ */
   const logAdmin = await zaloguj(E_ADMIN);
   const tokenAdmin = logAdmin.json?.access_token;
   zapisz('A1', 'Logowanie prawdziwym hasłem przez Auth',
@@ -303,79 +364,99 @@ async function przebieg() {
 
   const znowu = await zaloguj(E_ADMIN);
   const TOK_ADMIN = znowu.json?.access_token;
+  if (!TOK_ADMIN) throw new Error('Ponowne logowanie administratora nie powiodło się.');
 
-  /* A4 — reset hasła. Maszynowo widzimy tylko, że Auth przyjął żądanie
-     i że adres powrotny jest dozwolony. Czy wiadomość doszła i czy link
-     działa — tego bez skrzynki nie sprawdzimy. Stąd CZĘŚCIOWY.       */
+  /* A4 — reset hasła. Maszynowo widać tylko, że Auth przyjął żądanie. */
   const reset = await zapytaj('/auth/v1/recover', {
     metoda: 'POST', dane: { email: E_ADMIN, redirect_to: ADRES + '/nowe-haslo.html' } });
   zapisz('A4', 'Reset hasła przyjęty przez Auth (bez potwierdzenia doręczenia)',
     reset.status < 300 ? 'CZĘŚCIOWY' : 'FAIL',
     `POST /auth/v1/recover → ${reset.status}: ${skrot(reset.tekst)}`,
-    'SPRAWDZONE MASZYNOWO: żądanie przyjęte. NIESPRAWDZONE: czy wiadomość dotarła, ' +
-    'czy link prowadzi na /nowe-haslo.html i czy po nim da się ustawić hasło. ' +
-    'Do zamknięcia trzeba otworzyć skrzynkę — patrz też A5.');
+    `SPRAWDZONE MASZYNOWO: żądanie przyjęte. DO POTWIERDZENIA: otwórz skrzynkę `
+    + `${adminNaPrawdziwejSkrzynce ? SKRZYNKA : E_ADMIN}, znajdź wiadomość resetu, `
+    + 'kliknij link, sprawdź, że prowadzi na /nowe-haslo.html i że da się ustawić hasło.');
 
   const rejestracja = await zapytaj('/auth/v1/signup', {
-    metoda: 'POST', dane: { email: `nieproszony-${Date.now()}@${DOMENA}`, password: HASLO } });
+    metoda: 'POST', dane: { email: zPlusem('nieproszony'), password: HASLO } });
   zapisz('A6', 'Publiczna rejestracja jest wyłączona',
     ocena(rejestracja.status >= 400),
     `status ${rejestracja.status}: ${skrot(rejestracja.tekst)}`);
 
-  /* A7 — wyłączone konto. Sprawdzamy DWIE rzeczy naprawdę:
-       1. czy po wyłączeniu w aplikacji (`aktywne=false`) token nadal
-          odświeża się w Auth — bo to jest prawda o tym mechanizmie;
-       2. czy blokada na poziomie Auth (ban) faktycznie ucina odświeżanie.
-     Dodatkowo: czy wyłączone konto widzi jeszcze dane.               */
+  /* ══ DANE: instruktorka, dwa kursy, przypisanie ════════════════ */
+  const logInstr0 = await zaloguj(eInstr);
+  const idInstr   = logInstr0.json?.user?.id;
+  const nadanieRoli = await jakoAdmin(TOK_ADMIN, `/profile?id=eq.${idInstr}`,
+    { metoda: 'PATCH', dane: { rola: 'instruktor' } });
+  if (!/instruktor/.test(nadanieRoli.tekst))
+    throw new Error('Nie udało się nadać roli instruktora tokenem administratora: '
+                    + skrot(nadanieRoli.tekst));
+
+  const kursA = await jakoAdmin(TOK_ADMIN, '/kurs', { metoda: 'POST', dane: {
+    kod: 'e2e-a-' + Date.now(), nazwa_pl: 'E2E kurs A', instruktor_id: idInstr, opublikowany: true } });
+  const kursB = await jakoAdmin(TOK_ADMIN, '/kurs', { metoda: 'POST', dane: {
+    kod: 'e2e-b-' + Date.now(), nazwa_pl: 'E2E kurs B', instruktor_id: idInstr, opublikowany: true } });
+  const idKursA = kursA.json?.[0]?.id, idKursB = kursB.json?.[0]?.id;
+  if (!idKursA || !idKursB) throw new Error('Nie udało się założyć kursów testowych.');
+
   const logKurs = await zaloguj(eKurs);
-  const tokKurs = logKurs.json?.access_token;
-  const refKurs = logKurs.json?.refresh_token;
   const idKurs  = logKurs.json?.user?.id;
+  await jakoAdmin(TOK_ADMIN, '/przypisanie', { metoda: 'POST',
+    dane: { kurs_id: idKursA, kursant_id: idKurs, przypisal_id: idAdmin, aktywne: true } });
+
+  /* ══ A7 — co naprawdę robi wyłączenie konta ═══════════════════
+     Nie sprawdzamy własnego profilu z `aktywne=false` — to tautologia.
+     Sprawdzamy to, co decyduje o dostępie: czy wyłączony kursant widzi
+     jeszcze CHRONIONY KURS, czy `ja()` zwraca to, co aplikacja uzna za
+     „wyloguj", i czy token nadal się odświeża.                      */
+  const logKurs2 = await zaloguj(eKurs);
+  const tokKurs  = logKurs2.json?.access_token;
+  const refKurs  = logKurs2.json?.refresh_token;
+
+  const jaPrzed   = await zapytaj(
+    `/rest/v1/profile?id=eq.${idKurs}&select=id,imie,email,rola,jezyk,aktywne`, { token: tokKurs });
+  const kursPrzed = await zapytaj(`/rest/v1/kurs?id=eq.${idKursA}&select=id,nazwa_pl`, { token: tokKurs });
+  const widzialKurs = Array.isArray(kursPrzed.json) && kursPrzed.json.length === 1;
 
   await jakoAdmin(TOK_ADMIN, `/profile?id=eq.${idKurs}`, { metoda: 'PATCH', dane: { aktywne: false } });
-  const daneWylaczonego = await zapytaj(`/rest/v1/profile?id=eq.${idKurs}&select=aktywne`, { token: tokKurs });
+
+  const jaPo    = await zapytaj(
+    `/rest/v1/profile?id=eq.${idKurs}&select=id,imie,email,rola,jezyk,aktywne`, { token: tokKurs });
+  const kursPo  = await zapytaj(`/rest/v1/kurs?id=eq.${idKursA}&select=id,nazwa_pl`, { token: tokKurs });
+  const etapyPo = await zapytaj(`/rest/v1/etap?select=id&limit=1`, { token: tokKurs });
+  const matPo   = await zapytaj(`/rest/v1/material?select=id&limit=1`, { token: tokKurs });
+
+  // `ja()` w aplikacji: brak wiersza ALBO aktywne=false → wyloguj
+  const wierszJa = Array.isArray(jaPo.json) ? jaPo.json[0] : null;
+  const jaWylogowuje = !wierszJa || wierszJa.aktywne === false;
+  const kursOdciety  = Array.isArray(kursPo.json) && kursPo.json.length === 0;
+  const etapyOdciete = Array.isArray(etapyPo.json) && etapyPo.json.length === 0;
+  const matOdciete   = Array.isArray(matPo.json) && matPo.json.length === 0;
+
   const odswiezPoWylaczeniu = await odswiez(refKurs);
 
   const ban = await zapytaj(`/auth/v1/admin/users/${idKurs}`, {
     metoda: 'PUT', klucz: SEKR, token: SEKR, dane: { ban_duration: '24h' } });
-  const odswiezPoBanie = await odswiez(odswiezPoWylaczeniu.json?.refresh_token || refKurs);
+  const odswiezPoBanie   = await odswiez(odswiezPoWylaczeniu.json?.refresh_token || refKurs);
   const logowaniePoBanie = await zaloguj(eKurs);
-
-  const wierszProfilu = Array.isArray(daneWylaczonego.json) ? daneWylaczonego.json[0] : null;
-  const danePrzyciete = !wierszProfilu || wierszProfilu.aktywne === false;
   const banUcina = ban.status < 300 && (odswiezPoBanie.status >= 400 || logowaniePoBanie.status >= 400);
 
-  zapisz('A7', 'Wyłączone konto: co naprawdę robi flaga w aplikacji, a co blokada w Auth',
-    ocena(danePrzyciete && banUcina),
-    `profil po wyłączeniu: ${skrot(daneWylaczonego.tekst)} · odświeżenie po `
-    + `aktywne=false: ${odswiezPoWylaczeniu.status} · po banie w Auth: ${odswiezPoBanie.status} · `
-    + `logowanie po banie: ${logowaniePoBanie.status}`,
+  zapisz('A7', 'Wyłączone konto traci dostęp do chronionego kursu; token żyje do blokady w Auth',
+    ocena(widzialKurs && kursOdciety && etapyOdciete && matOdciete && jaWylogowuje && banUcina),
+    `przed wyłączeniem kurs widoczny: ${widzialKurs} · po: kurs ${kursPo.json?.length ?? '?'} wierszy, `
+    + `etapy ${etapyPo.json?.length ?? '?'}, materiały ${matPo.json?.length ?? '?'} · `
+    + `ja(): ${skrot(jaPo.tekst)} · odświeżenie po aktywne=false: ${odswiezPoWylaczeniu.status} · `
+    + `po banie: ${odswiezPoBanie.status} · logowanie po banie: ${logowaniePoBanie.status}`,
     odswiezPoWylaczeniu.status === 200
       ? 'POTWIERDZONE: sama flaga `aktywne=false` NIE unieważnia tokenu — Auth odświeża go dalej. '
-        + 'Dostęp do danych ucina RLS, a aplikacja wylogowuje przy sprawdzeniu `ja()`. '
+        + 'Dane ucina RLS (kurs, etapy i materiały znikają), a aplikacja wylogowuje na `ja()`. '
         + 'Twarde odcięcie sesji daje dopiero blokada konta w Auth.'
-      : 'Odświeżenie po samym `aktywne=false` też zostało odrzucone.');
+      : 'Odświeżenie po samym `aktywne=false` również zostało odrzucone.');
 
   await zapytaj(`/auth/v1/admin/users/${idKurs}`, {
     metoda: 'PUT', klucz: SEKR, token: SEKR, dane: { ban_duration: 'none' } });
   await jakoAdmin(TOK_ADMIN, `/profile?id=eq.${idKurs}`, { metoda: 'PATCH', dane: { aktywne: true } });
 
-  /* A8 — ograniczenie prób logowania */
-  const kodyLogowania = [];
-  for (let i = 0; i < 12; i++) {
-    const r = await zapytaj('/auth/v1/token?grant_type=password', {
-      metoda: 'POST', dane: { email: E_ADMIN, password: 'zupelnie-zle-haslo' } });
-    kodyLogowania.push(r.status);
-    if (r.status === 429) break;
-  }
-  zapisz('A8', 'Supabase ogranicza liczbę prób logowania',
-    ocena(kodyLogowania.includes(429)),
-    `kody kolejnych prób: ${kodyLogowania.join(', ')}`,
-    kodyLogowania.includes(429) ? '' : 'Brak 429 — sprawdź Auth → Rate Limits w panelu.');
-
-  /* A9 — adresy powrotne. Sprawdzamy PRZEKIEROWANIE, dwustronnie:
-     dozwolony adres ma być użyty, obcy ma zostać odrzucony. Patrzymy
-     na nagłówek Location, nie na sam kod odpowiedzi.                */
+  /* A9 — adresy powrotne, dwustronnie, po nagłówku Location */
   const przekierowanieDozwolone = await zapytaj(
     `/auth/v1/verify?token=token-ktory-nie-istnieje&type=recovery` +
     `&redirect_to=${encodeURIComponent(ADRES + '/nowe-haslo.html')}`,
@@ -387,7 +468,7 @@ async function przebieg() {
 
   const lokDozwolona = przekierowanieDozwolone.lokalizacja || '';
   const lokObca      = przekierowanieObce.lokalizacja || '';
-  const obcyOdrzucony = !lokObca.startsWith('https://zupelnie-obcy-adres.example');
+  const obcyOdrzucony  = !lokObca.startsWith('https://zupelnie-obcy-adres.example');
   const wlasnyPrzyjety = lokDozwolona.startsWith(ADRES);
 
   zapisz('A9', 'Adresy powrotne: własny jest honorowany, obcy odrzucany',
@@ -402,27 +483,11 @@ async function przebieg() {
     ocena(logAdmin.status === 200 && profilAdmina.status < 300),
     `publiczny: ${rodzajKlucza(PUBL)} · sekretny: ${rodzajKlucza(SEKR)} — cały przebieg ich używa`);
 
-  /* ══ DANE DO STORAGE ═══════════════════════════════════════════ */
-  const logInstr0 = await zaloguj(eInstr);
-  const idInstr   = logInstr0.json?.user?.id;
-  const nadanieRoli = await jakoAdmin(TOK_ADMIN, `/profile?id=eq.${idInstr}`,
-    { metoda: 'PATCH', dane: { rola: 'instruktor' } });
-  if (!/instruktor/.test(nadanieRoli.tekst))
-    throw new Error('Nie udało się nadać roli instruktora tokenem administratora: ' + skrot(nadanieRoli.tekst));
-
-  const kursA = await jakoAdmin(TOK_ADMIN, '/kurs', { metoda: 'POST', dane: {
-    kod: 'e2e-a-' + Date.now(), nazwa_pl: 'E2E kurs A', instruktor_id: idInstr, opublikowany: true } });
-  const kursB = await jakoAdmin(TOK_ADMIN, '/kurs', { metoda: 'POST', dane: {
-    kod: 'e2e-b-' + Date.now(), nazwa_pl: 'E2E kurs B', instruktor_id: idInstr, opublikowany: true } });
-  const idKursA = kursA.json?.[0]?.id, idKursB = kursB.json?.[0]?.id;
-  await jakoAdmin(TOK_ADMIN, '/przypisanie', { metoda: 'POST',
-    dane: { kurs_id: idKursA, kursant_id: idKurs, przypisal_id: idAdmin, aktywne: true } });
-
+  /* ══ STORAGE ═══════════════════════════════════════════════════ */
   const TOK_INSTR = (await zaloguj(eInstr)).json?.access_token;
   const TOK_KURS  = (await zaloguj(eKurs)).json?.access_token;
   const TOK_OBCY  = (await zaloguj(eObcy)).json?.access_token;
 
-  /* ══ STORAGE ═══════════════════════════════════════════════════ */
   const tresc    = 'E2E test file ' + Date.now();
   const sciezkaA = `kurs/${idKursA}/pdf/${Date.now()}-e2e.pdf`;
   const sciezkaB = `kurs/${idKursB}/pdf/${Date.now()}-obcy.pdf`;
@@ -485,8 +550,8 @@ async function przebieg() {
 
   /* ══ EDGE FUNCTION ═════════════════════════════════════════════ */
   const F = '/functions/v1/zapros';
-  const zaproszony  = `e2e-zapros-${Date.now().toString(36)}@${DOMENA}`;
-  const zaproszonyA = `e2e-zaprosadm-${Date.now().toString(36)}@${DOMENA}`;
+  const zaproszony  = zPlusem('zapros-instr');     // prawdziwa skrzynka — wiadomość dolatuje
+  const zaproszonyA = zPlusem('zapros-admin');
 
   const bezTokenu = await zapytaj(F, { metoda: 'POST',
     dane: { imie: 'X', email: zaproszony, rola: 'kursant' } });
@@ -515,8 +580,9 @@ async function przebieg() {
   if (kontoZaproszonej) sprzataj.push({ typ: 'user', co: kontoZaproszonej.id });
   zapisz('E3', 'Administrator zaprasza — Supabase przyjmuje i zakłada konto',
     zapros1.status === 200 && !!kontoZaproszonej ? 'CZĘŚCIOWY' : 'FAIL',
-    `status ${zapros1.status} · konto w Auth: ${kontoZaproszonej ? 'istnieje' : 'brak'}`,
-    'NIESPRAWDZONE MASZYNOWO: czy wiadomość z zaproszeniem dotarła do skrzynki.');
+    `status ${zapros1.status} · konto w Auth: ${kontoZaproszonej ? 'istnieje' : 'brak'} · ` +
+    `adres: ${zaproszony}`,
+    `DO POTWIERDZENIA: w skrzynce ${SKRZYNKA} ma czekać zaproszenie na ten adres z plusem.`);
 
   const zapros2 = await zapytaj(F, { metoda: 'POST', token: TOK_ADMIN,
     dane: { imie: 'E2E Zaproszona', email: zaproszony, rola: 'kursant' } });
@@ -548,14 +614,33 @@ async function przebieg() {
     ocena(zaprosAdm.status === 200 && /"rola":"admin"/.test(profilAdm.tekst)),
     `funkcja ${zaprosAdm.status} · profil: ${skrot(profilAdm.tekst)}`);
 
+  /* ── A8 na samym końcu ────────────────────────────────────────
+     Dwanaście złych logowań potrafi włączyć limit na cały adres IP.
+     Gdyby szło wcześniej, zatrułoby logowania w dalszej części
+     przebiegu i dostalibyśmy FAIL-e, które nic nie znaczą.        */
+  const kodyLogowania = [];
+  for (let i = 0; i < 12; i++) {
+    const r = await zapytaj('/auth/v1/token?grant_type=password', {
+      metoda: 'POST', dane: { email: E_ADMIN, password: 'zupelnie-zle-haslo' } });
+    kodyLogowania.push(r.status);
+    if (r.status === 429) break;
+  }
+  zapisz('A8', 'Supabase ogranicza liczbę prób logowania',
+    ocena(kodyLogowania.includes(429)),
+    `kody kolejnych prób: ${kodyLogowania.join(', ')}`,
+    kodyLogowania.includes(429)
+      ? 'Limit zadziałał. Uruchamiany na końcu przebiegu, żeby nie zatruł wcześniejszych logowań.'
+      : 'Brak 429 — sprawdź Auth → Rate Limits w panelu.');
+
+  /* ── scenariusze wymagające człowieka ─────────────────────────── */
   zapisz('E7', 'Nieudane nadanie roli wycofuje konto', 'RĘCZNY', '',
     'Nie da się wymusić bez psucia bazy. Ręcznie: odebrać roli `authenticated` prawo '
     + 'UPDATE na public.profile, zaprosić instruktora, sprawdzić, że funkcja zwróciła 500, '
     + 'a konto zniknęło z Authentication → Users. Potem przywrócić uprawnienie.');
 
   zapisz('A5', 'Zaproszenie prowadzi do ustawienia hasła i zalogowania', 'RĘCZNY', '',
-    `Otworzyć skrzynkę adresu zaproszonego w tym przebiegu, kliknąć link, ustawić hasło `
-    + 'na /nowe-haslo.html, zalogować się. Zrzut ekranu do raportu.');
+    `Otwórz skrzynkę ${SKRZYNKA}, znajdź zaproszenie wysłane na ${zaproszony}, kliknij link, `
+    + 'ustaw hasło na /nowe-haslo.html i zaloguj się. Zrzut ekranu do raportu.');
 }
 
 /* ══ START ════════════════════════════════════════════════════════ */

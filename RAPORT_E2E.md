@@ -1,150 +1,134 @@
-# RAPORT E2E — stan na 4 września 2026
+# RAPORT E2E — stan przed uruchomieniem
 
-Gałąź: **`platforma-v5`** · paczka **v5**
+Gałąź: **`platforma-v7`** · paczka **v7** · 4 września 2026
 
 ---
 
 ## WERDYKT: **NIEGOTOWE DO PRODUKCJI**
 
-Powód jest jeden i jest jednoznaczny: **26 testów E2E nie zostało
-wykonanych, bo nie powstał projekt Supabase.** Nie zrobię tego kroku sam
-i nie będę udawał, że da się go obejść.
-
-**Czego nie zrobię, nawet na wyraźne polecenie:** nie zakładam kont
-w cudzych serwisach i nie wpisuję nigdzie haseł. To dotyczy też
-rejestracji w Supabase. Konto zakłada człowiek — Ty.
-
-To nie jest cała prawda o blokadzie, więc od razu druga połowa: **gdy
-konto już istnieje, resztę mogę zrobić sam.** Projekt zakłada się przez
-API zarządzania, na osobistym tokenie dostępu, który wygenerujesz
-w swoim panelu. Napisałem do tego narzędzie. Poniżej dokładnie, co jest
-gotowe i co dzieli nas od wyniku.
+Powód niezmienny: **żaden z 26 scenariuszy E2E nie został wykonany**,
+bo nie ma jeszcze projektu Supabase. Kod jest gotowy do testu, ale
+gotowość kodu to nie to samo co wynik testu.
 
 ---
 
-## 1 · Co zrobiłem w tej rundzie
+## 1 · Co się zmieniło od v5
 
-| # | zadanie z listy | stan |
+Ten plik w v5 opisywał stan sprzed dwóch rund poprawek automatu. Teraz
+jest aktualny.
+
+**v6 — osiem poprawek automatu** (potwierdzone):
+E8 przestało być liczone dwa razy i doszła kontrola kompletu 26 pozycji ·
+A9 sprawdza przekierowanie po nagłówku `Location`, dwustronnie, zamiast
+wpisanego PASS · A4 dostało stan `CZĘŚCIOWY` · A7 naprawdę próbuje
+odświeżyć token · pierwszego administratora automat już nie nadaje
+kluczem sekretnym, tylko zatrzymuje się i podaje komendę do SQL Editora ·
+organizacja Supabase musi być wskazana jawnie · limit czasu na wstanie
+projektu kończy się błędem · sprzątanie działa też po błędzie i Ctrl+C.
+
+**v7 — korekta końcowa** (ta runda):
+
+| # | poprawka |
+|---|---|
+| 1 | Z kodu zniknęły domyślne `E2E_ADMIN` i `E2E_HASLO`. Obie wartości są obowiązkowe i pochodzą z `.env`; ich brak kończy przebieg **przed** założeniem jakiegokolwiek konta (kod wyjścia 2). Hasło krótsze niż 12 znaków też jest odrzucane. |
+| 2 | `.env.example` ma sekcję testów E2E z czterema zmiennymi — wszystkie **puste**, z opisem, po co są. |
+| 3 | Doszła `E2E_SKRZYNKA`: prawdziwy adres, z którego robimy adresy z plusem (`ktos+e2e-zapros-instr-m1x@…`). Konta dostające pocztę powstają właśnie tak, więc reset i zaproszenie **naprawdę dolatują** i da się zamknąć A4, A5 i E3. Fikcyjna domena zostaje tylko dla kont, które niczego nie odbierają — i też jest opcjonalna. |
+| 4 | A7 nie sprawdza już własnego profilu z `aktywne=false` (to była tautologia). Sprawdza **dostęp do chronionego kursu**: przed wyłączeniem kursant widzi kurs A, po wyłączeniu ma zniknąć kurs, etapy i materiały; do tego odpowiedź `ja()` w postaci, którą aplikacja czyta jako „wyloguj", odświeżenie tokenu po samym `aktywne=false` i po blokadzie w Auth. |
+| 5 | Ten raport. |
+
+Przy okazji: **A8 przeniesione na koniec przebiegu.** Dwanaście złych
+logowań potrafi włączyć limit na cały adres IP — gdyby szło wcześniej,
+zatrułoby logowania w dalszej części i dostalibyśmy FAIL-e, które nic
+nie znaczą.
+
+**Produktu ani bazy nie ruszałem.** Zmiany v6 i v7 dotyczą wyłącznie
+`testy/e2e_supabase.js`, `narzedzia/zaloz-projekt.js`, `.env.example`
+i dokumentacji. Testy lokalne: 57/57 bez zmian.
+
+---
+
+## 2 · Podział 26 scenariuszy — stan obecny
+
+| stan | ile | które |
 |---|---|---|
-| 1 | Utworzyć projekt testowy Supabase | **ZABLOKOWANE** — wymaga konta; narzędzie gotowe (`npm run projekt:testowy`) |
-| 2 | Nie używać prawdziwych danych kursantów | **ZROBIONE** — testy pracują wyłącznie na kontach `@e2e.przyklad.pl`, zakładanych i kasowanych w tym samym przebiegu |
-| 3 | Wdrożyć schemat, RLS, bucket, Edge Function, Redirect URLs | **PRZYGOTOWANE** — kolejność i treść w `URUCHOMIENIE.md` §2.2–2.5; wykonanie po punkcie 1 |
-| 4 | Pierwszy administrator | **PRZYGOTOWANE I SPRAWDZONE LOKALNIE** — `ustanow_pierwszego_admina()`, testy bazy 19 i 20 |
-| 5 | Uruchomić 26 testów | **NIEWYKONANE** — kod gotowy: `npm run e2e` |
-| 6 | Zapisywać dowód każdego testu | **PRZYGOTOWANE** — runner sam pisze `testy/WYNIK_E2E.md` i `wynik_e2e.json` z odpowiedziami systemu |
-| 7 | Zatrzymać wdrożenie przy błędzie ról albo bezpieczeństwa | **PRZYGOTOWANE** — runner kończy się kodem 1 i wypisuje listę nieudanych scenariuszy |
-| 8 | Nie podpinać domeny, nie wdrażać produkcji, nie ruszać `main` | **DOTRZYMANE** — nic nie wysłane, `main` nietknięty |
-| 9 | Poprawić mylący fragment o odzyskiwaniu administratora | **ZROBIONE** — i sprawdzone na bazie, opis niżej |
+| **PASS / FAIL** — rozstrzygane maszynowo | **22** | A1, A2, A3, A6, A7, A8, A9, A10, S1–S7, E1, E2, E4, E5, E6, E8, E9 |
+| **CZĘŚCIOWY** — część maszynowo, reszta wymaga skrzynki | **2** | A4 (reset przyjęty, doręczenie do potwierdzenia), E3 (konto założone, wiadomość do potwierdzenia) |
+| **RĘCZNY** — maszynowo się nie da | **2** | A5 (kliknięcie w link i ustawienie hasła), E7 (wymuszona awaria nadania roli) |
+
+Żaden z tych stanów nie jest wpisany w kodzie na sztywno — wszystkie
+wynikają z odpowiedzi systemu. Raport `testy/WYNIK_E2E.md` przy każdej
+pozycji pokazuje surową odpowiedź, a na końcu sprawdza, czy pozycji jest
+dokładnie 26 i czy żadna się nie powtórzyła.
 
 ---
 
-## 2 · Punkt 9 — sprostowanie, które było potrzebne
+## 3 · Czego potrzebuję, żeby ruszyć
 
-Instrukcja v4 pisała: *„wyłącz albo zdegraduj pozostałych adminów
-z aplikacji, a gdy nie ma już żadnego aktywnego — funkcja znów
-zadziała"*. Sprawdziłem to na bazie i **tak się nie da**:
+**Od Ciebie — konto i token:**
 
+1. `supabase.com` → Start your project → załóż konto. **Tego nie zrobię
+   za Ciebie**: nie zakładam kont w cudzych serwisach i nie wpisuję
+   nigdzie haseł.
+2. Account → Access Tokens → Generate new token.
+3. Wklej sam token do pliku `.supabase-token` w katalogu paczki.
+4. Napisz „jest".
+
+**Ode mnie — reszta:**
+
+```bash
+ORG_SUPABASE="<nazwa organizacji>" npm run projekt:testowy
+#   projekt na planie darmowym, Frankfurt, klucze prosto do .env (600)
+#   organizacji nie wybieram sam — bez wskazania wypisuję listę i staję
+
+# schemat, RLS, Storage w SQL Editorze; bucket `materialy` prywatny;
+# supabase functions deploy zapros; Redirect URLs (URUCHOMIENIE.md §2.5)
+
+npm run konfig && npm run e2e
+#   pierwszy przebieg zatrzyma się i poda jedną komendę do SQL Editora:
+#   select public.ustanow_pierwszego_admina('<E2E_ADMIN>');
+#   po jej wykonaniu — drugie uruchomienie robi całość
 ```
-update public.profile set aktywne=false where id=<jedyny admin>;
-ERROR:  To jedyny aktywny administrator — nie mozna go wylaczyc ani zdegradowac.
-```
 
-Stan „zero aktywnych administratorów" nigdy tą drogą nie powstanie, więc
-opisana procedura prowadziła donikąd. `URUCHOMIENIE.md` ma teraz sekcję
-**2.6a** z czterema realnymi scenariuszami (zapomniane hasło, niedostępna
-skrzynka, drugi admin, brak dostępu do wszystkiego) i jedną procedurą
-ratunkową w SQL Editorze — **sprawdzoną**: po `commit` nowy adres ma rolę
-`admin`, po `rollback` nic się nie zmienia.
+Do `.env` dojdą jeszcze `E2E_SKRZYNKA`, `E2E_ADMIN` i `E2E_HASLO` —
+podasz mi adres skrzynki, hasło wygeneruję.
 
 ---
 
-## 3 · Co dokładnie jest gotowe do uruchomienia
+## 4 · Co pozostaje do zrobienia
 
-### `npm run projekt:testowy`
-Zakłada projekt na planie darmowym w regionie Frankfurt, czeka, aż
-wstanie, pobiera klucze i zapisuje `.env` z prawami 600. **Nie wypisuje
-żadnego klucza ani tokenu** — ani na ekran, ani do raportu. Jeśli projekt
-o tej nazwie już istnieje, używa go zamiast zakładać drugi.
-
-### `npm run e2e`
-Wykonuje wszystkie 26 scenariuszy przeciwko żywemu projektowi i zapisuje
-`testy/WYNIK_E2E.md` — tabelę z PASS/FAIL, opisem i **surową odpowiedzią
-systemu** przy każdym punkcie. Na koniec kasuje wszystko, co założył,
-i wypisuje, gdyby czegoś nie udało się posprzątać.
-
-Rozkład scenariuszy:
-
-| grupa | zautomatyzowane | do potwierdzenia ręcznie |
-|---|---|---|
-| Auth A1–A10 | A1, A2, A3, A4, A6, A7, A8, A9, A10 | **A5** — kliknięcie w link ze skrzynki |
-| Storage S1–S7 | wszystkie siedem | — |
-| Edge E1–E9 | E1, E2, E3, E4, E5, E6, E8, E9 | **E7** — wymusza awarię nadania roli |
-
-Dwa scenariusze ręczne są tak oznaczone w kodzie i wyjdą w raporcie jako
-`RĘCZNY`, nie jako `PASS`. Nie zaliczam sobie punktów za coś, czego
-maszyna nie sprawdziła.
-
-**Uczciwie o samym runnerze:** do pierwszego uruchomienia przeciwko
-żywemu projektowi to kod **nieprzetestowany**. Pierwszy przebieg będzie
-jednocześnie testem skryptu i pewnie coś w nim poprawię. Napisałem to
-w nagłówku pliku, żeby nikt nie wziął jego istnienia za dowód, że testy
-przeszły.
-
----
-
-## 4 · Co musisz zrobić Ty — jakieś trzy minuty
-
-1. **supabase.com → Start your project** → załóż konto (GitHub albo e-mail).
-   To jedyny krok, którego nie zrobię.
-2. **Account → Access Tokens → Generate new token**, nazwij np. `astera-coach`.
-3. Wklej token do pliku
-   `~/Desktop/Claude outputs/ASTERA_COACH_PLATFORMA_KANDYDAT_v5/.supabase-token`
-   (sam plik, nic więcej; jest w `.gitignore`, nie wypisuję jego treści).
-4. Powiedz mi „jest" — resztę prowadzę sam: projekt, schemat, RLS, bucket,
-   Edge Function, Redirect URLs, pierwszy administrator, 26 testów i raport.
-
-Nie wklejaj tokenu do rozmowy. Ma leżeć w pliku.
-
----
-
-## 5 · Co pozostaje do zrobienia
-
-**Zanim ruszy test E2E**
-- konto Supabase i token (punkt wyżej);
-- `supabase` CLI do wdrożenia Edge Function — albo wgranie funkcji z panelu.
+**Zanim ruszy E2E**
+- konto Supabase i token dostępu;
+- adres skrzynki testowej (najlepiej Twój firmowy — użyjemy adresów z plusem);
+- `supabase` CLI albo wgranie Edge Function z panelu.
 
 **Po zielonym E2E, przed produkcją**
-- decyzja: plan darmowy czy Pro (darmowy usypia bazę po tygodniu bezczynności);
-- adres `coach.thaimaliwan.pl` + Redirect URLs pod ten adres;
+- decyzja: darmowy czy Pro (darmowy usypia bazę po tygodniu bezczynności);
+- adres `coach.thaimaliwan.pl` i Redirect URLs pod ten adres;
 - lista kont na start: imię, e-mail, rola;
-- materiały do wgrania (PDF-y, zdjęcia, nagrania) i przypisania Maliwan;
-- tłumaczenie tajskie etapów poza kursem podstawowym;
+- materiały do wgrania i przypisania Maliwan;
+- tajskie tłumaczenia etapów poza kursem podstawowym;
 - regulamin i informacja o danych osobowych — platforma trzyma imiona,
-  adresy i postępy, więc potrzebna jest podstawa prawna;
-- ograniczenie prób logowania: na Supabase jest wbudowane, ale trzeba
-  potwierdzić limity (scenariusz A8).
+  adresy i postępy;
+- potwierdzenie limitów logowania (A8) i przegląd logów Edge Function (E5).
 
-**Świadomie poza zakresem teraz**
+**Świadomie poza zakresem**
 - płatności, tłumacz na żywo, nagrywanie sesji, eksport do XLSX.
 
 ---
 
-## 6 · Adres projektu testowego
+## 5 · Adres projektu testowego
 
-**Nie istnieje.** Pojawi się tutaj po wykonaniu punktu 4 z sekcji 4,
-w postaci `https://<ref>.supabase.co` — bez żadnych kluczy.
+**Nie istnieje.** Pojawi się tutaj po utworzeniu, w postaci
+`https://<ref>.supabase.co` — bez żadnych kluczy.
 
 ---
 
-## 7 · Werdykt
+## 6 · Werdykt
 
 **NIEGOTOWE DO PRODUKCJI.**
 
-Kod jest gotowy do testu: 57 testów lokalnych przechodzi, bloker z ról
-naprawiony i potwierdzony testami na bazie z wyzwalaczami, instrukcja
-sprostowana. Ale **żaden z 26 scenariuszy E2E nie został wykonany**,
-a bez nich nie wolno mówić o gotowości — tak samo, jak nie wolno było
-przy 36/36 w v2 i przy 57/57 teraz.
-
-Do zielonego światła brakuje jednego kroku po Twojej stronie i jednego
-przebiegu po mojej.
+Za nami: 57 testów lokalnych, naprawiony bloker ról, sprostowana
+instrukcja, automat E2E po dwóch rundach poprawek. Przed nami: jedno
+konto do założenia po Twojej stronie i pierwszy przebieg po mojej.
+Dopiero jego wynik — nie istnienie skryptu — będzie podstawą do zmiany
+tego werdyktu.

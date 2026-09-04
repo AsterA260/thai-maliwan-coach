@@ -6,7 +6,8 @@ Poniższe scenariusze wymagają żywego projektu Supabase. Nikt takiego
 nie założył, więc te testy **nie zostały wykonane** i nie udajemy,
 że jest inaczej.
 
-Stan na 4 września 2026, gałąź `platforma-v5`. Wykonanie: `npm run e2e`.
+Stan na 4 września 2026, gałąź `platforma-v7`. Wykonanie: `npm run e2e`
+(wymaga uzupełnionego `.env` — patrz `.env.example`, sekcja TESTY E2E).
 
 ---
 

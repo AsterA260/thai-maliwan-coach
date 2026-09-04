@@ -2,7 +2,7 @@
 
 Zamknięta platforma szkoleniowa z prawdziwym logowaniem i trzema rolami.
 Nic nie jest opublikowane, nic nie poszło na GitHuba, wersja produkcyjna
-strony szkoły nietknięta. Gałąź: **`platforma-v5`**.
+strony szkoły nietknięta. Gałąź: **`platforma-v7`**.
 
 Co zmieniło się po audycie — patrz `RAPORT_ZMIAN.md`.
 Czego jeszcze nie sprawdziliśmy — `testy/oczekujace.md`.
