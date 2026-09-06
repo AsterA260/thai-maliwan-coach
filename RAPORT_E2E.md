@@ -1,134 +1,174 @@
-# RAPORT E2E — stan przed uruchomieniem
+# RAPORT E2E — WYKONANY na żywym Supabase
 
-Gałąź: **`platforma-v7`** · paczka **v7** · 4 września 2026
-
----
-
-## WERDYKT: **NIEGOTOWE DO PRODUKCJI**
-
-Powód niezmienny: **żaden z 26 scenariuszy E2E nie został wykonany**,
-bo nie ma jeszcze projektu Supabase. Kod jest gotowy do testu, ale
-gotowość kodu to nie to samo co wynik testu.
+4 września 2026 · projekt testowy **`astera-coach-test`**
+Adres: `https://idgrxrkviyntwmiceywi.supabase.co` · region Central EU (Frankfurt)
+Organizacja: Thai Maliwan (plan **Free**) · **bez kluczy w tym dokumencie**
 
 ---
 
-## 1 · Co się zmieniło od v5
+## WERDYKT: **NIEGOTOWE DO PRODUKCJI** — ale z zupełnie innego powodu niż wczoraj
 
-Ten plik w v5 opisywał stan sprzed dwóch rund poprawek automatu. Teraz
-jest aktualny.
+**18 z 26 scenariuszy przeszło maszynowo.** Cała warstwa, która decyduje
+o bezpieczeństwie — RLS, Storage, role, uprawnienia Edge Function — działa
+na żywym Supabase tak samo jak lokalnie.
 
-**v6 — osiem poprawek automatu** (potwierdzone):
-E8 przestało być liczone dwa razy i doszła kontrola kompletu 26 pozycji ·
-A9 sprawdza przekierowanie po nagłówku `Location`, dwustronnie, zamiast
-wpisanego PASS · A4 dostało stan `CZĘŚCIOWY` · A7 naprawdę próbuje
-odświeżyć token · pierwszego administratora automat już nie nadaje
-kluczem sekretnym, tylko zatrzymuje się i podaje komendę do SQL Editora ·
-organizacja Supabase musi być wskazana jawnie · limit czasu na wstanie
-projektu kończy się błędem · sprzątanie działa też po błędzie i Ctrl+C.
-
-**v7 — korekta końcowa** (ta runda):
-
-| # | poprawka |
-|---|---|
-| 1 | Z kodu zniknęły domyślne `E2E_ADMIN` i `E2E_HASLO`. Obie wartości są obowiązkowe i pochodzą z `.env`; ich brak kończy przebieg **przed** założeniem jakiegokolwiek konta (kod wyjścia 2). Hasło krótsze niż 12 znaków też jest odrzucane. |
-| 2 | `.env.example` ma sekcję testów E2E z czterema zmiennymi — wszystkie **puste**, z opisem, po co są. |
-| 3 | Doszła `E2E_SKRZYNKA`: prawdziwy adres, z którego robimy adresy z plusem (`ktos+e2e-zapros-instr-m1x@…`). Konta dostające pocztę powstają właśnie tak, więc reset i zaproszenie **naprawdę dolatują** i da się zamknąć A4, A5 i E3. Fikcyjna domena zostaje tylko dla kont, które niczego nie odbierają — i też jest opcjonalna. |
-| 4 | A7 nie sprawdza już własnego profilu z `aktywne=false` (to była tautologia). Sprawdza **dostęp do chronionego kursu**: przed wyłączeniem kursant widzi kurs A, po wyłączeniu ma zniknąć kurs, etapy i materiały; do tego odpowiedź `ja()` w postaci, którą aplikacja czyta jako „wyloguj", odświeżenie tokenu po samym `aktywne=false` i po blokadzie w Auth. |
-| 5 | Ten raport. |
-
-Przy okazji: **A8 przeniesione na koniec przebiegu.** Dwanaście złych
-logowań potrafi włączyć limit na cały adres IP — gdyby szło wcześniej,
-zatrułoby logowania w dalszej części i dostalibyśmy FAIL-e, które nic
-nie znaczą.
-
-**Produktu ani bazy nie ruszałem.** Zmiany v6 i v7 dotyczą wyłącznie
-`testy/e2e_supabase.js`, `narzedzia/zaloz-projekt.js`, `.env.example`
-i dokumentacji. Testy lokalne: 57/57 bez zmian.
+Zostało sześć niezaliczonych i dwa ręczne. **Pięć z sześciu to nie jest
+błąd kodu** — to limit wbudowanej poczty darmowego planu. Szósty to realne
+odkrycie o produkcie, opisane niżej.
 
 ---
 
-## 2 · Podział 26 scenariuszy — stan obecny
+## 1 · Co zostało wdrożone
 
-| stan | ile | które |
+| krok | stan | dowód |
 |---|---|---|
-| **PASS / FAIL** — rozstrzygane maszynowo | **22** | A1, A2, A3, A6, A7, A8, A9, A10, S1–S7, E1, E2, E4, E5, E6, E8, E9 |
-| **CZĘŚCIOWY** — część maszynowo, reszta wymaga skrzynki | **2** | A4 (reset przyjęty, doręczenie do potwierdzenia), E3 (konto założone, wiadomość do potwierdzenia) |
-| **RĘCZNY** — maszynowo się nie da | **2** | A5 (kliknięcie w link i ustawienie hasła), E7 (wymuszona awaria nadania roli) |
+| Projekt testowy, plan Free, Frankfurt | zrobione | `ACTIVE_HEALTHY` |
+| `db/01_schema.sql` | zrobione | 9 tabel, 1 widok |
+| Wyzwalacz `na_nowego_uzytkownika` | **założył się sam** | `select tgname from pg_trigger` → istnieje |
+| `db/02_rls.sql` | zrobione | polityki i granty na miejscu |
+| Bucket `materialy` | zrobione | `public: false` |
+| `db/03_storage.sql` | zrobione | 4 polityki: odczyt, zapis, podmiana, kasowanie |
+| Rejestracja publiczna | **wyłączona** | `disable_signup: true` |
+| Redirect URLs | ustawione | `/nowe-haslo.html`, `/index.html` |
+| Edge Function `zapros` | wdrożona | status `ACTIVE`, wersja 2 |
+| Pierwszy administrator | **utworzony instrukcją z §2.6** | `kursant` → `admin` |
 
-Żaden z tych stanów nie jest wpisany w kodzie na sztywno — wszystkie
-wynikają z odpowiedzi systemu. Raport `testy/WYNIK_E2E.md` przy każdej
-pozycji pokazuje surową odpowiedź, a na końcu sprawdza, czy pozycji jest
-dokładnie 26 i czy żadna się nie powtórzyła.
+Nic nie poszło na GitHuba, domena niepodpięta, produkcja nietknięta.
 
 ---
 
-## 3 · Czego potrzebuję, żeby ruszyć
+## 2 · Wynik: 26 scenariuszy
 
-**Od Ciebie — konto i token:**
-
-1. `supabase.com` → Start your project → załóż konto. **Tego nie zrobię
-   za Ciebie**: nie zakładam kont w cudzych serwisach i nie wpisuję
-   nigdzie haseł.
-2. Account → Access Tokens → Generate new token.
-3. Wklej sam token do pliku `.supabase-token` w katalogu paczki.
-4. Napisz „jest".
-
-**Ode mnie — reszta:**
-
-```bash
-ORG_SUPABASE="<nazwa organizacji>" npm run projekt:testowy
-#   projekt na planie darmowym, Frankfurt, klucze prosto do .env (600)
-#   organizacji nie wybieram sam — bez wskazania wypisuję listę i staję
-
-# schemat, RLS, Storage w SQL Editorze; bucket `materialy` prywatny;
-# supabase functions deploy zapros; Redirect URLs (URUCHOMIENIE.md §2.5)
-
-npm run konfig && npm run e2e
-#   pierwszy przebieg zatrzyma się i poda jedną komendę do SQL Editora:
-#   select public.ustanow_pierwszego_admina('<E2E_ADMIN>');
-#   po jej wykonaniu — drugie uruchomienie robi całość
+```
+PASS 18 · FAIL 6 · RĘCZNY 2 · razem 26
 ```
 
-Do `.env` dojdą jeszcze `E2E_SKRZYNKA`, `E2E_ADMIN` i `E2E_HASLO` —
-podasz mi adres skrzynki, hasło wygeneruję.
+### Przeszły (18)
+
+**Auth:** A1 logowanie · A2 odświeżenie tokenu · A3 wylogowanie unieważnia
+token odświeżania (`refresh_token_not_found`) · A6 rejestracja wyłączona
+(`signup_disabled`) · A7 wyłączone konto traci dostęp do kursu, etapów
+i materiałów · A9 adresy powrotne · A10 nowe klucze `sb_publishable_`/`sb_secret_`
+
+**Storage (komplet 7/7):** S1 bucket prywatny · S2 instruktor wgrywa ·
+S3 kursant dostaje podpisany link · S4 link wygasa · S5 obcy kursant nie
+dostaje linku · S6 nie wgra pod cudzą ścieżkę (`new row violates row-level
+security policy`) · S7 niezgodne metadane odrzucone
+
+**Edge Function:** E1 bez tokenu → 401 · E2 kursant i instruktor → 403 ·
+E5 klucz sekretny nie wycieka · E6 OPTIONS z nagłówkami CORS
+(`Allow-Origin: http://127.0.0.1:8910`)
+
+### Nie przeszły (6)
+
+| # | co się stało | przyczyna |
+|---|---|---|
+| A4 | reset hasła → 400 `email_address_invalid` | poczta |
+| E3 | zaproszenie → 400 | poczta |
+| E4 | ponowne zaproszenie → 400 zamiast 409 | poczta (pierwsze nie doszło) |
+| E8 | brak profilu instruktora | poczta (konto nie powstało) |
+| E9 | brak profilu admina | poczta (jw.) |
+| A8 | 12 nieudanych logowań, **ani jednego 429** | patrz §4 |
+
+### Ręczne (2)
+
+A5 — kliknięcie w link z poczty. E7 — wymuszona awaria nadania roli.
 
 ---
 
-## 4 · Co pozostaje do zrobienia
+## 3 · Pięć porażek z jednego powodu: poczta
 
-**Zanim ruszy E2E**
-- konto Supabase i token dostępu;
-- adres skrzynki testowej (najlepiej Twój firmowy — użyjemy adresów z plusem);
-- `supabase` CLI albo wgranie Edge Function z panelu.
+Sprawdzone u źródła, nie zgadywane:
 
-**Po zielonym E2E, przed produkcją**
-- decyzja: darmowy czy Pro (darmowy usypia bazę po tygodniu bezczynności);
-- adres `coach.thaimaliwan.pl` i Redirect URLs pod ten adres;
-- lista kont na start: imię, e-mail, rola;
-- materiały do wgrania i przypisania Maliwan;
-- tajskie tłumaczenia etapów poza kursem podstawowym;
-- regulamin i informacja o danych osobowych — platforma trzyma imiona,
-  adresy i postępy;
-- potwierdzenie limitów logowania (A8) i przegląd logów Edge Function (E5).
+```
+GET  /v1/projects/{ref}/config/auth
+     rate_limit_email_sent: 2       ← dwa maile na godzinę
+     smtp_host: None                ← brak własnego SMTP
 
-**Świadomie poza zakresem**
-- płatności, tłumacz na żywo, nagrywanie sesji, eksport do XLSX.
+POST /auth/v1/invite
+     429 {"error_code":"over_email_send_rate_limit"}
+
+PATCH rate_limit_email_sent = 30
+     401 {"message":"Custom SMTP required to configure … RATE_LIMIT_EMAIL_SENT.
+          Missing SMTP_ADMIN_EMAIL, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS"}
+```
+
+Wbudowana poczta Supabase wysyła **dwie wiadomości na godzinę** i tylko na
+adresy powiązane z zespołem. Limitu nie da się podnieść bez własnego SMTP —
+Supabase odmawia wprost. Jeden przebieg E2E potrzebuje trzech wiadomości.
+
+**Co to znaczy dla kodu.** Sama Edge Function działa: E1, E2, E5 i E6
+przechodzą, czyli sprawdzanie tokenu, ról, CORS i szczelność klucza są
+w porządku. Zawodzi wyłącznie ostatni krok — wysyłka. Tego nie naprawi
+zmiana w kodzie.
+
+**Co odblokowuje.** Własny SMTP w Authentication → Emails → SMTP Settings.
+Hasła SMTP nie wpisuję — to wpisujesz Ty. Kandydaci: poczta w cyber_Folks
+(masz ją do thaimaliwan.pl), Resend, Brevo, SendGrid.
 
 ---
 
-## 5 · Adres projektu testowego
+## 4 · A8 — to jest prawdziwe odkrycie, nie usterka testu
 
-**Nie istnieje.** Pojawi się tutaj po utworzeniu, w postaci
-`https://<ref>.supabase.co` — bez żadnych kluczy.
+Dwanaście kolejnych logowań ze złym hasłem: **dwanaście razy 400, ani razu
+429**. Konfiguracja projektu potwierdza, czego brakuje:
+
+```
+rate_limit_anonymous_users: 30    rate_limit_otp: 30
+rate_limit_token_refresh: 150     rate_limit_verify: 30
+```
+
+Nie ma pozycji ograniczającej **nieudane logowania hasłem**.
+
+W `testy/oczekujace.md` pisałem, że brak takiego limitu to „jedyna realna
+luka wersji deweloperskiej, bo na produkcji obsługuje to Supabase".
+**To było błędne założenie i E2E je obaliło.** Zdanie do poprawienia.
+
+Do zamknięcia przed produkcją: włączyć CAPTCHA (Cloudflare Turnstile)
+w Authentication → Attack Protection, albo dołożyć własne ograniczenie
+przed logowaniem. Decyzja Norberta — Turnstile wymaga darmowego konta
+Cloudflare i klucza.
 
 ---
 
-## 6 · Werdykt
+## 5 · Jedna poprawka kodu, którą wymusił E2E
+
+Pierwszy deploy funkcji dawał `BOOT_ERROR` i siedem testów E leciało na 503.
+Przyczyna: import `https://esm.sh/@supabase/supabase-js@2`, którego nowe
+środowisko Edge Functions nie wstaje. Zmiana na `npm:@supabase/supabase-js@2`
+i po redeployu E1, E2, E5, E6 przeszły.
+
+To jedyna zmiana w produkcie w tej rundzie — i dokładnie ten rodzaj błędu,
+którego żaden test lokalny ani atrapa nie mogły wychwycić.
+
+---
+
+## 6 · Co pozostaje do zrobienia
+
+**Żeby domknąć E2E (5 testów + 1 ręczny)**
+1. Własny SMTP — Ty wpisujesz dane, ja powtarzam przebieg.
+2. Po SMTP: A4, E3, E4, E8, E9 automatycznie, A5 ręcznie (klik w link).
+
+**Zanim w ogóle mowa o produkcji**
+3. A8 — ochrona przed zgadywaniem hasła (Turnstile albo własna).
+4. E7 — ręczna próba awarii nadania roli.
+5. Decyzja Free czy Pro (Free usypia bazę po tygodniu bezczynności).
+6. Adres `coach.thaimaliwan.pl` + Redirect URLs pod niego.
+7. Lista kont startowych, materiały, przypisania Maliwan.
+8. Regulamin i podstawa przetwarzania danych.
+
+**Sprzątanie po testach** — runner sam skasował wszystkie konta testowe
+po każdym przebiegu. Zostaje jedno, celowo: `norbert+coach-admin@…`,
+bo ma nadaną rolę admin i pozwala uruchamiać E2E bez powtarzania SQL-a.
+
+---
+
+## 7 · Werdykt
 
 **NIEGOTOWE DO PRODUKCJI.**
 
-Za nami: 57 testów lokalnych, naprawiony bloker ról, sprostowana
-instrukcja, automat E2E po dwóch rundach poprawek. Przed nami: jedno
-konto do założenia po Twojej stronie i pierwszy przebieg po mojej.
-Dopiero jego wynik — nie istnienie skryptu — będzie podstawą do zmiany
-tego werdyktu.
+Ale to inne „niegotowe" niż wczoraj. Bezpieczeństwo — RLS, Storage, role,
+uprawnienia funkcji, pierwszy administrator — **zostało sprawdzone na żywym
+Supabase i działa**. Blokują dwie rzeczy spoza kodu: poczta na darmowym
+planie i brak ochrony przed zgadywaniem hasła. Obie wymagają Twojej decyzji,
+nie kolejnej rundy programowania.

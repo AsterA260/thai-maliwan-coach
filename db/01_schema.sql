@@ -196,6 +196,46 @@ create index if not exists idx_postep_kursant      on public.postep(kursant_id);
 create index if not exists idx_pytanie_kurs        on public.pytanie(kurs_id);
 
 -- ═══════════════════════════════════════════════════════════════════
+--  TOŻSAMOŚĆ ZALOGOWANEGO — public.uid()            [Etap 0 migracji]
+-- ═══════════════════════════════════════════════════════════════════
+--  Zamiennik `public.uid()` Supabase. Czyta identyfikator użytkownika
+--  z ustawienia `astera.uzytkownik`, które AsterA Core ustawia
+--  W ZAKRESIE TRANSAKCJI, bezpośrednio po jej otwarciu:
+--
+--      BEGIN
+--      select set_config('astera.uzytkownik', $1, true);   -- true = LOCAL
+--      … zapytania …
+--      COMMIT
+--
+--  DLACZEGO `set_config(..., true)`, A NIE `SET LOCAL`
+--  `SET LOCAL x = $1` nie istnieje — PostgreSQL nie przyjmuje w tym
+--  poleceniu parametru. Jedyną formą, która pozwala podać wartość
+--  bezpiecznie (bez sklejania SQL-a), jest `set_config` z trzecim
+--  argumentem `true`, oznaczającym zasięg transakcji.
+--
+--  DLACZEGO KAŻDE ZAPYTANIE MUSI BYĆ W JAWNEJ TRANSAKCJI
+--  W trybie autozatwierdzania ustawienie lokalne wygasa razem
+--  z poleceniem, które je wykonało — czyli ZANIM przyjdzie właściwe
+--  zapytanie. Kod wygląda wtedy na poprawny, a tożsamości nie ma.
+--
+--  DLACZEGO STAN DOMYŚLNY TO „NIKT", A NIE „POPRZEDNI"
+--  Bez ustawienia funkcja zwraca NULL, a polityki RLS nie przepuszczają
+--  niczego. To warunek bezpieczeństwa przy poolingu połączeń: połączenie
+--  wracające do puli nie może zabrać ze sobą cudzej tożsamości.
+--  Sprawdza to test 22 w `testy/bezpieczenstwo.js`.
+--
+--  Wartość niebędąca UUID podniesie błąd rzutowania — celowo. Odmowa
+--  jest bezpieczniejsza niż ciche wpuszczenie przy błędnej konfiguracji.
+create or replace function public.uid()
+returns uuid language sql stable set search_path = public as $$
+  select nullif(current_setting('astera.uzytkownik', true), '')::uuid
+$$;
+
+comment on function public.uid() is
+  'Tożsamość zalogowanego, ustawiana transakcyjnie przez AsterA Core: '
+  'set_config(''astera.uzytkownik'', <uuid>, true). Brak ustawienia = NULL.';
+
+-- ═══════════════════════════════════════════════════════════════════
 --  WYZWALACZE — spójność, której nie da się wyrazić polityką RLS
 -- ═══════════════════════════════════════════════════════════════════
 
@@ -240,7 +280,7 @@ returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.odpowiedz is distinct from old.odpowiedz then
     -- zmiana odpowiedzi = stempel: kto i kiedy, z sesji, nie z żądania
-    new.odpowiedzial_id := auth.uid();
+    new.odpowiedzial_id := public.uid();
     new.odpowiedziano   := now();
   else
     -- bez zmiany odpowiedzi te pola zostają takie, jakie były
@@ -312,7 +352,7 @@ $$;
 --  wtedy, gdy `jestem_adminem()` = prawda, czyli gdy w sesji siedzi
 --  zalogowany administrator. Ale przy zakładaniu pierwszego konta
 --  ŻADNEGO administratora jeszcze nie ma, a SQL Editor i klient
---  `service_role` nie mają `auth.uid()`. Efekt: `UPDATE ... SET
+--  `service_role` nie mają `public.uid()`. Efekt: `UPDATE ... SET
 --  rola='admin'` mówił „UPDATE 1" i po cichu nic nie zmieniał.
 --
 --  Rozwiązanie: jedna, wąska furtka. Wyzwalacz przepuszcza zmianę,
@@ -333,13 +373,23 @@ $$;
 --  Rolę wywołującego widać w GUC `role` (ustawianym przez SET ROLE)
 --  i w roli z tokenu — sprawdzamy OBIE, bo obie są odporne na
 --  `security definer`. Brak tokenu = SQL Editor, czyli migracja.
+--  ETAP 0 MIGRACJI — dawniej trzeci warunek czytał rolę z tokenu JWT
+--  Supabase (`request.jwt.claims`). Po przejściu na własną tożsamość
+--  tokenu w bazie już nie ma, więc jego miejsce zajmuje warunek
+--  mocniejszy i prostszy: `public.uid() is null`.
+--
+--  Czyta się to tak: kontekstem inicjalizacji jest wyłącznie migracja
+--  uruchamiana bez zalogowanego użytkownika. Ktokolwiek działa przez
+--  AsterA Core ma ustawioną tożsamość — i tym samym jest tu odcięty,
+--  niezależnie od tego, jaką flagę sobie ustawi. To zamyka dziurę,
+--  którą wychwycił test 20, bez opierania się na czymkolwiek, co
+--  wywołujący mógłby podrobić.
 create or replace function public.kontekst_inicjalizacji()
 returns boolean language sql stable set search_path = public as $$
   select coalesce(current_setting('astera.inicjalizacja', true), '') = 'tak'
-     and coalesce(current_setting('role', true), 'brak') not in ('authenticated', 'anon')
-     and coalesce(
-           (coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::json->>'role'),
-           'brak') not in ('authenticated', 'anon')
+     and coalesce(current_setting('role', true), 'brak')
+           not in ('astera_api', 'authenticated', 'anon')
+     and public.uid() is null
 $$;
 
 -- ── Profil: nikt sam sobie nie zmieni e-maila, roli ani aktywności ─

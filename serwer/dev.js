@@ -4,7 +4,7 @@
  *
  * PO CO ISTNIEJE
  * Na produkcji rolę backendu pełni Supabase: Auth wydaje token, PostgREST
- * wykonuje zapytania w roli `authenticated` z ustawionym request.jwt.claims,
+ * wykonuje zapytania w roli `astera_api` z tożsamością ustawianą transakcyjnie,
  * Storage wydaje podpisane linki, a RLS decyduje o wszystkim.
  *
  * Ten plik robi to samo lokalnie, żeby dało się uruchomić i przetestować
@@ -72,13 +72,13 @@ async function zapytaj(uid, sql, params = []) {
   const k = await pool.connect();
   try {
     await k.query('begin');
+    // ETAP 0: ten sam wzorzec, który obowiązuje AsterA Core —
+    // BEGIN → set_config('astera.uzytkownik', <uuid>, true) → … → COMMIT.
+    // Rola zawsze `astera_api`; brak tożsamości to brak set_config,
+    // a nie inna rola bazodanowa.
+    await k.query('set local role astera_api');
     if (uid) {
-      await k.query('set local role authenticated');
-      await k.query(`select set_config('request.jwt.claims',$1,true)`,
-        [JSON.stringify({ sub: uid, role: 'authenticated' })]);
-    } else {
-      await k.query('set local role anon');
-      await k.query(`select set_config('request.jwt.claims','{"role":"anon"}',true)`);
+      await k.query(`select set_config('astera.uzytkownik',$1,true)`, [uid]);
     }
     const r = await k.query(sql, params);
     await k.query('commit');
@@ -93,7 +93,7 @@ async function zapytaj(uid, sql, params = []) {
 async function profil(sesja){
   if (!sesja) return null;
   const [p] = await zapytaj(sesja.uid,
-    `select id, imie, email, rola, jezyk, aktywne from public.profile where id = auth.uid()`);
+    `select id, imie, email, rola, jezyk, aktywne from public.profile where id = public.uid()`);
   if (!p || p.aktywne === false) { zabijSesje(sesja.token); return null; }
   return p;
 }
@@ -140,7 +140,7 @@ const API = {
     const { rows:[u] } = await pool.query(`select id from auth.users where lower(email)=$1`, [email]);
     if (!u) return [401, { blad: 'Nieprawidłowy adres e-mail lub hasło.' }];
     const [p] = await zapytaj(u.id,
-      `select id, imie, email, rola, jezyk, aktywne from public.profile where id = auth.uid()`);
+      `select id, imie, email, rola, jezyk, aktywne from public.profile where id = public.uid()`);
     if (!p) return [403, { blad: 'To konto nie ma jeszcze profilu. Odezwij się do administratora.' }];
     if (p.aktywne === false) return [403, { blad: 'To konto jest wyłączone.' }];
     return [200, { profil: p }, nowaSesja(u.id)];
@@ -183,7 +183,7 @@ const API = {
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
     const r = await zapytaj(s.uid, `
       insert into public.postep (kursant_id, etap_id, status)
-      values (auth.uid(), $1, $2)
+      values (public.uid(), $1, $2)
       on conflict (kursant_id, etap_id) do update set status=$2, zmienione=now()
       returning *`, [c.etap_id, c.status]);
     return [200, r[0] || null];
@@ -208,7 +208,7 @@ const API = {
     if (tresc.length > 1000) return [400, { blad: 'Pytanie jest za długie — zmieść się w 1000 znakach.' }];
     const r = await zapytaj(s.uid, `
       insert into public.pytanie (kursant_id, kurs_id, etap_id, tresc)
-      values (auth.uid(), $1, $2, $3) returning *`, [c.kurs_id, c.etap_id || null, tresc]);
+      values (public.uid(), $1, $2, $3) returning *`, [c.kurs_id, c.etap_id || null, tresc]);
     return [200, r[0]];
   },
 
@@ -218,7 +218,7 @@ const API = {
     if (odp.length < 2) return [400, { blad: 'Napisz odpowiedź.' }];
     const r = await zapytaj(s.uid, `
       update public.pytanie
-         set odpowiedz = $2, odpowiedzial_id = auth.uid(), status = 'odpowiedziane'
+         set odpowiedz = $2, odpowiedzial_id = public.uid(), status = 'odpowiedziane'
        where id = $1 returning *`, [c.id, odp]);
     if (!r.length) return [403, { blad: 'Nie możesz odpowiadać na to pytanie.' }];
     return [200, r[0]];
@@ -320,7 +320,7 @@ const API = {
     try {
       r = await zapytaj(s.uid, `
         insert into public.zaproszenie (email, imie, rola, kurs_id, token_hash, zaprosil_id)
-        values ($1,$2,$3,$4,$5,auth.uid()) returning id, email, imie, rola, wygasa`,
+        values ($1,$2,$3,$4,$5,public.uid()) returning id, email, imie, rola, wygasa`,
         [email, imie, c.rola, c.kurs_id || null, hash]);
     } catch (e) { return [403, { blad: 'Tylko administrator może zapraszać.' }]; }
     if (!r.length) return [403, { blad: 'Tylko administrator może zapraszać.' }];
@@ -346,7 +346,7 @@ const API = {
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
     const r = await zapytaj(s.uid, `
       insert into public.przypisanie (kurs_id, kursant_id, przypisal_id)
-      values ($1,$2,auth.uid())
+      values ($1,$2,public.uid())
       on conflict (kurs_id, kursant_id) do update set aktywne = true
       returning *`, [c.kurs_id, c.kursant_id]);
     if (!r.length) return [403, { blad: 'Tylko administrator przypisuje kursantów.' }];
@@ -469,7 +469,7 @@ async function wgrajPlik(req, res, u, sesja){
     const r = await zapytaj(sesja.uid, `
       insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka,
                                    rozmiar_b, mime, opublikowany, dodal_id)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,false,auth.uid()) returning *`,
+      values ($1,$2,$3,$4,$5,$6,$7,$8,false,public.uid()) returning *`,
       [kurs_id, u.searchParams.get('etap_id') || null, typ, nazwa,
        u.searchParams.get('opis') || null, sciezka, bajtow, mime]);
     rekord = r[0];

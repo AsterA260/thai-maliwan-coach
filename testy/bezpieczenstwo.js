@@ -3,9 +3,11 @@
  * AsterA Coach — testy bezpieczeństwa na poziomie BAZY
  *
  * Każdy test wykonuje się na prawdziwej bazie z włączonym i wymuszonym
- * RLS, w roli `authenticated` i z ustawionym request.jwt.claims —
- * dokładnie tak, jak Supabase ustawia kontekst zalogowanego.
- * Niezalogowany = rola `anon` bez żadnych claimów.
+ * RLS, w roli `astera_api` i z tożsamością ustawioną TRANSAKCYJNIE:
+ *   BEGIN → set_config('astera.uzytkownik', <uuid>, true) → … → COMMIT
+ * dokładnie tak, jak robi to AsterA Core.
+ * Niezalogowany = ta sama rola, tylko bez set_config — bo Core łączy się
+ * jedną rolą, a brak tokenu to brak tożsamości, nie inna rola.
  *
  * Testy HTTP (sesje, logowanie, wgrywanie plików) są w testy/http.js.
  * Testy Auth i Storage na żywym Supabase są OCZEKUJĄCE — patrz
@@ -33,13 +35,13 @@ let db, wyniki = [];
 async function jako(uid, sql, params = []) {
   await db.query('begin');
   try {
+    // ETAP 0: tożsamość ustawiana TRANSAKCYJNIE, dokładnie tak jak robi
+    // to AsterA Core. Rola bazodanowa zawsze `astera_api` — także dla
+    // niezalogowanego, bo Core łączy się jedną rolą, a brak tokenu
+    // oznacza po prostu brak set_config, nie inną rolę.
+    await db.query('set local role astera_api');
     if (uid) {
-      await db.query('set local role authenticated');
-      await db.query(`select set_config('request.jwt.claims', $1, true)`,
-        [JSON.stringify({ sub: uid, role: 'authenticated' })]);
-    } else {
-      await db.query('set local role anon');
-      await db.query(`select set_config('request.jwt.claims', '{"role":"anon"}', true)`);
+      await db.query(`select set_config('astera.uzytkownik', $1, true)`, [uid]);
     }
     const r = await db.query(sql, params);
     await db.query('rollback');
@@ -57,9 +59,8 @@ const n = r => (r.ok ? (r.rows[0] ? Number(r.rows[0].n) : 0) : 0);
 async function jakoTrwale(uid, sql, params = []) {
   await db.query('begin');
   try {
-    await db.query('set local role authenticated');
-    await db.query(`select set_config('request.jwt.claims', $1, true)`,
-      [JSON.stringify({ sub: uid, role: 'authenticated' })]);
+    await db.query('set local role astera_api');
+    await db.query(`select set_config('astera.uzytkownik', $1, true)`, [uid]);
     const r = await db.query(sql, params);
     await db.query('commit');
     return { ok: true, rows: r.rows, n: r.rowCount };
@@ -206,9 +207,9 @@ function sprawdz(nr, opis, warunek, szczegol) {
      values ($1,$2,'zrobione') returning id`, [KTO.ania, ep.id]);
   // przepięcie własnego postępu na etap CUDZEGO kursu
   const h4 = await jako(KTO.ania, `insert into public.postep (kursant_id, etap_id, status)
-     values (auth.uid(),$1,'zrobione') returning id`, [em.id]);
+     values (public.uid(),$1,'zrobione') returning id`, [em.id]);
   const h5 = await jako(KTO.ania, `update public.postep set etap_id=$1
-     where kursant_id=auth.uid() returning id`, [em.id]);
+     where kursant_id=public.uid() returning id`, [em.id]);
   const h6 = await jako(KTO.maliwan, `select count(*)::int n from public.postep where etap_id=$1`, [ep.id]);
   await db.query(`delete from public.postep where kursant_id=$1`, [KTO.ania]);
   sprawdz(9, 'Postęp jest prywatny i nie da się go przepiąć do etapu innego kursu',
@@ -219,11 +220,11 @@ function sprawdz(nr, opis, warunek, szczegol) {
 
   /* ── 10. Pytanie: etap musi należeć do kursu ────────────────── */
   const i1 = await jako(KTO.ania, `insert into public.pytanie (kursant_id, kurs_id, etap_id, tresc)
-     values (auth.uid(),$1,$2,'Test') returning id`, [KURS.podstawowy, em.id]);
+     values (public.uid(),$1,$2,'Test') returning id`, [KURS.podstawowy, em.id]);
   const i2 = await jako(KTO.ania, `insert into public.pytanie (kursant_id, kurs_id, etap_id, tresc)
-     values (auth.uid(),$1,$2,'Test poprawny') returning id`, [KURS.podstawowy, ep.id]);
+     values (public.uid(),$1,$2,'Test poprawny') returning id`, [KURS.podstawowy, ep.id]);
   const i3 = await jako(KTO.ania, `insert into public.pytanie (kursant_id, kurs_id, tresc)
-     values (auth.uid(),$1,'Nie moj kurs') returning id`, [KURS.mistrzowski]);
+     values (public.uid(),$1,'Nie moj kurs') returning id`, [KURS.mistrzowski]);
   sprawdz(10, 'Pytanie: etap musi należeć do tego samego kursu, a kurs musi być własny',
     !i1.ok && i2.ok && !i3.ok,
     `etap z innego kursu: ${i1.ok?'PRZESZŁO — ŹLE':'odrzucone'} · poprawne: ` +
@@ -234,7 +235,7 @@ function sprawdz(nr, opis, warunek, szczegol) {
     `insert into public.pytanie (kursant_id, kurs_id, tresc)
      values ($1,$2,'Pytanie oryginalne') returning id`, [KTO.ania, KURS.podstawowy]);
   const j1 = await jako(KTO.maliwan, `update public.pytanie
-     set odpowiedz='Odpowiedź Maliwan', status='odpowiedziane', odpowiedzial_id=auth.uid(),
+     set odpowiedz='Odpowiedź Maliwan', status='odpowiedziane', odpowiedzial_id=public.uid(),
          tresc='PODMIENIONA TREŚĆ', kursant_id=$2, kurs_id=$3
      where id=$1 returning tresc, kursant_id, kurs_id, odpowiedz, status, odpowiedziano`,
      [pyt.id, KTO.piotr, KURS.mistrzowski]);
@@ -298,9 +299,8 @@ function sprawdz(nr, opis, warunek, szczegol) {
   await A.connect(); await B.connect();
   const jakoAdmin = async k => {
     await k.query('begin');
-    await k.query('set local role authenticated');
-    await k.query(`select set_config('request.jwt.claims', $1, true)`,
-      [JSON.stringify({ sub: KTO.norbert, role: 'authenticated' })]);
+    await k.query('set local role astera_api');
+    await k.query(`select set_config('astera.uzytkownik', $1, true)`, [KTO.norbert]);
   };
   await jakoAdmin(A); await jakoAdmin(B);
 
@@ -328,7 +328,7 @@ function sprawdz(nr, opis, warunek, szczegol) {
 
   /* ═══ ROLE PRZY ZAPRASZANIU — sedno drugiego audytu ══════════════
      Klucz `service_role` omija RLS, ale NIE jest zalogowanym adminem:
-     `auth.uid()` jest wtedy puste, więc wyzwalacz `chron_profil`
+     `public.uid()` jest wtedy puste, więc wyzwalacz `chron_profil`
      cofał nadaną rolę. Poniższe testy odtwarzają obie drogi na
      PRAWDZIWEJ bazie — atrapa Supabase by tego nie wychwyciła,
      bo nie uruchamia wyzwalaczy.                                   */
@@ -359,14 +359,14 @@ function sprawdz(nr, opis, warunek, szczegol) {
     `update public.profile set rola='admin' where id=$1`, [idAdmina]);
   const rolaAdmina = await rolaKonta(idAdmina);
 
-  // ta sama zmiana kluczem serwisowym — czyli BEZ auth.uid() — musi się nie udać
+  // ta sama zmiana kluczem serwisowym — czyli BEZ public.uid() — musi się nie udać
   const idKontrolny = await nowyUzytkownik('kontrola.roli@przyklad.pl', 'Kontrola');
   await db.query(`update public.profile set rola='admin' where id=$1`, [idKontrolny]);
   const rolaBezTozsamosci = await rolaKonta(idKontrolny);
 
   sprawdz(18, 'Zaproszenie administratora kończy się profilem „admin"; bez tożsamości — nie',
     rolaAdmina === 'admin' && rolaBezTozsamosci === 'kursant',
-    `przez admina: ${rolaAdmina} · bez auth.uid() (klucz serwisowy / SQL Editor): ` +
+    `przez admina: ${rolaAdmina} · bez public.uid() (klucz serwisowy / SQL Editor): ` +
     `${rolaBezTozsamosci} — po cichu cofnięte, dlatego istnieje ustanow_pierwszego_admina()`);
 
   /* ── 19. Pierwszy administrator zgodnie z instrukcją ───────────── */
@@ -394,17 +394,16 @@ function sprawdz(nr, opis, warunek, szczegol) {
   /* ── 20. Kursant nie użyje tej drogi do podniesienia sobie roli ── */
   const p1 = await jako(KTO.ania, `select public.ustanow_pierwszego_admina('ania@przyklad.pl')`);
   const p2 = await jako(KTO.ania,
-    `update public.profile set rola='admin' where id = auth.uid() returning rola`);
+    `update public.profile set rola='admin' where id = public.uid() returning rola`);
   // najtwardsza próba: kursant sam ustawia flagę inicjalizacji
   await db.query('begin');
-  await db.query('set local role authenticated');
-  await db.query(`select set_config('request.jwt.claims', $1, true)`,
-    [JSON.stringify({ sub: KTO.ania, role: 'authenticated' })]);
+  await db.query('set local role astera_api');
+  await db.query(`select set_config('astera.uzytkownik', $1, true)`, [KTO.ania]);
   let p3;
   try {
     await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
     p3 = (await db.query(
-      `update public.profile set rola='admin' where id = auth.uid() returning rola`)).rows[0]?.rola;
+      `update public.profile set rola='admin' where id = public.uid() returning rola`)).rows[0]?.rola;
   } catch (e) { p3 = 'odmowa: ' + e.message.split('\n')[0]; }
   await db.query('rollback');
 
@@ -414,6 +413,14 @@ function sprawdz(nr, opis, warunek, szczegol) {
     `${p2.rows?.[0]?.rola ?? '—'} · z własnoręczną flagą: ${p3}`);
 
   /* ── 21. Instruktor nie podpisze odpowiedzi cudzym nazwiskiem ──── */
+  // Przygotowanie stanu, tak samo jak w teście 9: pytania tworzone
+  // w `jako()` znikają wraz z rollbackiem, a dane startowe żadnego nie
+  // zawierają. Bez tego test nie miałby czego sprawdzić i zgłaszał
+  // „brak pytania" zamiast wyniku.
+  await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do testu 21'`);
+  await db.query(
+    `insert into public.pytanie (kursant_id, kurs_id, tresc)
+     values ($1, $2, 'Pytanie kontrolne do testu 21')`, [KTO.ania, KURS.podstawowy]);
   const [pytanieDoTestu] = (await jako(KTO.norbert,
     `select id from public.pytanie where kurs_id=$1 limit 1`, [KURS.podstawowy])).rows || [];
   const podszycie = pytanieDoTestu ? await jako(KTO.maliwan,
@@ -431,9 +438,88 @@ function sprawdz(nr, opis, warunek, szczegol) {
       ? 'Maliwan' : w21.odpowiedzial_id}, ${new Date(w21.odpowiedziano).getFullYear()}`
         : 'brak pytania do sprawdzenia');
 
-  /* sprzątanie po testach 17–18 */
+  /* ── 22. Tożsamość nie wycieka między równoległymi transakcjami ──
+     To jest test warunku bezpieczeństwa Etapu 0. Sprawdza trzy rzeczy:
+
+       A. Przy współdzielonej puli połączeń każda transakcja widzi
+          WYŁĄCZNIE dane swojego użytkownika — mimo że fizycznych
+          połączeń jest kilkakrotnie mniej niż żądań.
+       B. Żądanie BEZ ustawionej tożsamości widzi zero wierszy,
+          a nie dane poprzedniego użytkownika tego połączenia.
+       C. Test ma moc wykrywczą: ten sam scenariusz z ustawieniem
+          SESYJNYM (`set_config(..., false)`) tożsamość ZOSTAWIA —
+          gdyby ten podtest wyszedł „czysto", znaczyłoby to, że test
+          nie potrafi wykryć błędu i jest bezwartościowy.            */
+  {
+    const { Pool } = require('pg');
+    const POLACZEN = 3, ZADAN = 30;
+    const pula = new Pool({ ...DB, max: POLACZEN });
+
+    // Kto ile kursów widzi — wartości oczekiwane, policzone raz.
+    const oczekiwane = {};
+    for (const [imie, uid] of Object.entries(KTO)) {
+      const r = await jako(uid, `select count(*)::int n from public.kurs`);
+      oczekiwane[uid] = n(r);
+    }
+
+    async function zadanie(uid) {
+      const k = await pula.connect();
+      try {
+        await k.query('begin');
+        await k.query('set local role astera_api');
+        if (uid) await k.query(`select set_config('astera.uzytkownik', $1, true)`, [uid]);
+        // odrobina losowego opóźnienia, żeby transakcje faktycznie się przeplatały
+        await k.query('select pg_sleep($1)', [Math.random() * 0.05]);
+        const r = await k.query(`select count(*)::int n, public.uid()::text u from public.kurs`);
+        await k.query('commit');
+        return { uid, widzi: r.rows[0].n, tozsamosc: r.rows[0].u };
+      } catch (e) {
+        await k.query('rollback').catch(() => {});
+        return { uid, blad: e.message.split('\n')[0] };
+      } finally {
+        k.release();
+      }
+    }
+
+    const uidy = Object.values(KTO);
+    const plan = Array.from({ length: ZADAN }, (_, i) =>
+      i % 6 === 5 ? null : uidy[i % uidy.length]);      // co szóste bez tożsamości
+    const wynikiA = await Promise.all(plan.map(zadanie));
+
+    const zTozsamoscia = wynikiA.filter(w => w.uid);
+    const bezTozsamosci = wynikiA.filter(w => !w.uid);
+
+    const aOk = zTozsamoscia.every(w =>
+      !w.blad && w.tozsamosc === w.uid && w.widzi === oczekiwane[w.uid]);
+    const bOk = bezTozsamosci.every(w =>
+      !w.blad && w.tozsamosc === null && w.widzi === 0);
+
+    // C — kontrola mocy wykrywczej: ustawienie SESYJNE na jednym połączeniu
+    const pula1 = new Pool({ ...DB, max: 1 });
+    const k1 = await pula1.connect();
+    await k1.query(`select set_config('astera.uzytkownik', $1, false)`, [KTO.norbert]);
+    k1.release();
+    const k2 = await pula1.connect();
+    const zostalo = (await k2.query(`select public.uid()::text u`)).rows[0].u;
+    k2.release();
+    await pula1.end();
+    const cOk = zostalo === KTO.norbert;   // MA zostać — inaczej test nic nie wykrywa
+
+    await pula.end();
+
+    sprawdz(22, 'Tożsamość nie wycieka między transakcjami przez wspólną pulę połączeń',
+      aOk && bOk && cOk,
+      `${ZADAN} żądań przez ${POLACZEN} połączenia · z tożsamością: ${zTozsamoscia.length} ` +
+      `(${aOk ? 'każde widzi tylko swoje' : 'WYCIEK — ŹLE'}) · bez tożsamości: ` +
+      `${bezTozsamosci.length} (${bOk ? 'zero wierszy' : 'WIDZĄ DANE — ŹLE'}) · ` +
+      `kontrola: ustawienie sesyjne ${cOk ? 'zostaje na połączeniu (test ma moc wykrywczą)'
+        : 'NIE ZOSTAJE — test niczego nie sprawdza'}`);
+  }
+
+  /* sprzątanie po testach 17–18 i 21 */
   await db.query(`delete from auth.users where email in
     ('nowy.instruktor@przyklad.pl','nowy.admin@przyklad.pl','kontrola.roli@przyklad.pl')`);
+  await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do testu 21'`);
 
   const zdane = wyniki.filter(w => w.zdal).length;
   console.log(`\n═══ BAZA: ${zdane} / ${wyniki.length} ═══`);

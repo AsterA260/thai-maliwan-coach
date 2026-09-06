@@ -9,6 +9,16 @@
 
 begin;
 
+-- ── 0. KONTEKST INICJALIZACJI ────────────────────────────────────
+--  Bez tego wyzwalacz `chron_profil` cicho cofa nadanie ról: profil
+--  powstaje z rolą 'kursant' (wyzwalacz na auth.users), a UPDATE
+--  w sekcji 2 mówi „UPDATE 1" i nic nie zmienia — bo nie ma
+--  zalogowanego administratora, który mógłby rolę nadać.
+--  Ta sama furtka co przy zakładaniu pierwszego administratora:
+--  flaga działa wyłącznie w transakcji i tylko wtedy, gdy nikt nie
+--  jest zalogowany (patrz public.kontekst_inicjalizacji()).
+select set_config('astera.inicjalizacja', 'tak', true);
+
 -- ── 1. KONTA (lokalnie; na Supabase pomiń tę sekcję) ─────────────
 insert into auth.users (id, email, raw_user_meta_data) values
  ('11111111-1111-1111-1111-111111111111','norbert@thaimaliwan.pl','{"imie":"Norbert"}'),

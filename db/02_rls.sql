@@ -12,25 +12,25 @@
 -- ── FUNKCJE POMOCNICZE ────────────────────────────────────────────
 create or replace function public.moja_rola()
 returns text language sql stable security definer set search_path = public as $$
-  select rola::text from public.profile where id = auth.uid() and aktywne
+  select rola::text from public.profile where id = public.uid() and aktywne
 $$;
 
 create or replace function public.jestem_adminem()
 returns boolean language sql stable security definer set search_path = public as $$
   select coalesce((select rola = 'admin' from public.profile
-                   where id = auth.uid() and aktywne), false)
+                   where id = public.uid() and aktywne), false)
 $$;
 
 create or replace function public.jestem_instruktorem()
 returns boolean language sql stable security definer set search_path = public as $$
   select coalesce((select rola = 'instruktor' from public.profile
-                   where id = auth.uid() and aktywne), false)
+                   where id = public.uid() and aktywne), false)
 $$;
 
 create or replace function public.prowadze_kurs(p_kurs uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.kurs k
-                 where k.id = p_kurs and k.instruktor_id = auth.uid())
+                 where k.id = p_kurs and k.instruktor_id = public.uid())
      and public.jestem_instruktorem()
 $$;
 
@@ -40,7 +40,7 @@ returns boolean language sql stable security definer set search_path = public as
     select 1
     from public.przypisanie p
     join public.profile pr on pr.id = p.kursant_id
-    where p.kurs_id = p_kurs and p.kursant_id = auth.uid()
+    where p.kurs_id = p_kurs and p.kursant_id = public.uid()
       and p.aktywne and pr.aktywne
   )
 $$;
@@ -73,20 +73,20 @@ end $$;
 -- ═══ PROFILE ═══════════════════════════════════════════════════════
 drop policy if exists profile_select on public.profile;
 create policy profile_select on public.profile for select using (
-      id = auth.uid()
+      id = public.uid()
    or public.jestem_adminem()
    or (public.jestem_instruktorem() and exists (
         select 1 from public.przypisanie p
         join public.kurs k on k.id = p.kurs_id
         where p.kursant_id = profile.id
-          and k.instruktor_id = auth.uid() and p.aktywne))
+          and k.instruktor_id = public.uid() and p.aktywne))
 );
 
 -- Zmiana własnego profilu: dozwolona, ale wyzwalacz `profil_ochrona`
 -- i tak przywraca e-mail, rolę i aktywność do poprzednich wartości.
 drop policy if exists profile_update_wlasny on public.profile;
 create policy profile_update_wlasny on public.profile for update
-  using  (id = auth.uid()) with check (id = auth.uid());
+  using  (id = public.uid()) with check (id = public.uid());
 
 drop policy if exists profile_admin_all on public.profile;
 create policy profile_admin_all on public.profile for all
@@ -103,12 +103,12 @@ create policy kurs_admin_all on public.kurs for all
 drop policy if exists kurs_instruktor_update on public.kurs;
 create policy kurs_instruktor_update on public.kurs for update
   using (public.prowadze_kurs(id))
-  with check (instruktor_id = auth.uid());
+  with check (instruktor_id = public.uid());
 
 -- ═══ PRZYPISANIA — tylko admin przypisuje ═════════════════════════
 drop policy if exists przypisanie_select on public.przypisanie;
 create policy przypisanie_select on public.przypisanie for select using (
-      kursant_id = auth.uid()
+      kursant_id = public.uid()
    or public.jestem_adminem()
    or public.prowadze_kurs(kurs_id)
 );
@@ -184,26 +184,26 @@ create policy material_instruktor_all on public.material for all
 --  odrzuca polityka i dodatkowo wyzwalacz `postep_spojnosc`.
 drop policy if exists postep_select on public.postep;
 create policy postep_select on public.postep for select using (
-      kursant_id = auth.uid()
+      kursant_id = public.uid()
    or public.jestem_adminem()
    or public.prowadze_kurs(public.kurs_etapu(etap_id))
 );
 
 drop policy if exists postep_kursant_insert on public.postep;
 create policy postep_kursant_insert on public.postep for insert with check (
-  kursant_id = auth.uid()
+  kursant_id = public.uid()
   and public.zapisany_na_kurs(public.kurs_etapu(etap_id))
 );
 
 drop policy if exists postep_kursant_update on public.postep;
 create policy postep_kursant_update on public.postep for update
-  using  (kursant_id = auth.uid())
-  with check (kursant_id = auth.uid()
+  using  (kursant_id = public.uid())
+  with check (kursant_id = public.uid()
               and public.zapisany_na_kurs(public.kurs_etapu(etap_id)));
 
 drop policy if exists postep_kursant_delete on public.postep;
 create policy postep_kursant_delete on public.postep for delete
-  using (kursant_id = auth.uid());
+  using (kursant_id = public.uid());
 
 drop policy if exists postep_admin_all on public.postep;
 create policy postep_admin_all on public.postep for all
@@ -212,14 +212,14 @@ create policy postep_admin_all on public.postep for all
 -- ═══ PYTANIA ═══════════════════════════════════════════════════════
 drop policy if exists pytanie_select on public.pytanie;
 create policy pytanie_select on public.pytanie for select using (
-      kursant_id = auth.uid()
+      kursant_id = public.uid()
    or public.jestem_adminem()
    or public.prowadze_kurs(kurs_id)
 );
 
 drop policy if exists pytanie_kursant_insert on public.pytanie;
 create policy pytanie_kursant_insert on public.pytanie for insert with check (
-  kursant_id = auth.uid() and public.zapisany_na_kurs(kurs_id)
+  kursant_id = public.uid() and public.zapisany_na_kurs(kurs_id)
 );
 
 -- Instruktor odpowiada. Wyzwalacz `pytanie_ochrona` przywraca
@@ -239,35 +239,72 @@ create policy zaproszenie_admin on public.zaproszenie for all
   using (public.jestem_adminem()) with check (public.jestem_adminem());
 
 -- ═══════════════════════════════════════════════════════════════════
+--  ROLA APLIKACYJNA `astera_api`                     [Etap 0 migracji]
+-- ═══════════════════════════════════════════════════════════════════
+--  Tą rolą łączy się z bazą AsterA Core — i tylko ona. Warunki:
+--
+--    NOBYPASSRLS   nie omija polityk. Zapisane jawnie, choć jest to
+--                  wartość domyślna: to zbyt ważne, żeby zostawić
+--                  domyślności.
+--    NOSUPERUSER   superużytkownik omija RLS niezależnie od FORCE.
+--    NOCREATEROLE  nie nadaje uprawnień sobie ani nikomu.
+--    nie jest właścicielem tabel — właściciel omija RLS wszędzie tam,
+--                  gdzie nie ma `force row level security`. Mamy FORCE
+--                  na wszystkich tabelach, ale rozdział własności
+--                  i dostępu zostaje drugą warstwą zabezpieczenia.
+--
+--  Lokalnie rola jest NOLOGIN — testy wchodzą w nią przez SET ROLE.
+--  Na Aurorze dostaje LOGIN i poświadczenia z menedżera sekretów;
+--  hasła nie ma w żadnym pliku repozytorium.
+do $$ begin
+  create role astera_api nologin nosuperuser nocreatedb nocreaterole
+                         noinherit nobypassrls;
+exception when duplicate_object then
+  alter role astera_api nosuperuser nocreatedb nocreaterole nobypassrls;
+end $$;
+
+-- Żeby testy i migracje mogły wejść w tę rolę przez SET ROLE.
+do $$ begin
+  execute format('grant astera_api to %I', current_user);
+exception when others then null; end $$;
+
+-- ═══════════════════════════════════════════════════════════════════
 --  UPRAWNIENIA TABELOWE I FUNKCYJNE
 --  Domyślnie nic. Nadajemy tylko to, co naprawdę potrzebne.
 -- ═══════════════════════════════════════════════════════════════════
-revoke all on all tables    in schema public from anon, authenticated;
-revoke all on all functions in schema public from anon, authenticated, public;
-revoke all on all routines  in schema public from anon, authenticated, public;
+revoke all on all tables    in schema public from anon, authenticated, astera_api;
+revoke all on all functions in schema public from anon, authenticated, astera_api, public;
+revoke all on all routines  in schema public from anon, authenticated, astera_api, public;
 
-grant usage on schema public to anon, authenticated;
+grant usage on schema public to anon, authenticated, astera_api;
 
 grant select, insert, update, delete on
   public.profile, public.kurs, public.przypisanie, public.lekcja,
   public.etap, public.material, public.postep, public.pytanie, public.zaproszenie
-  to authenticated;
+  to authenticated, astera_api;
 
 -- Widok kursantów: tylko do odczytu. Ma `security_invoker`, więc i tak
 -- pokazuje wyłącznie to, co pytającemu przepuszczą polityki tabel.
-grant select on public.widok_kursanci to authenticated;
+grant select on public.widok_kursanci to authenticated, astera_api;
+
+-- Tożsamość zalogowanego. Wywołują ją polityki RLS bezpośrednio
+-- (np. `id = public.uid()`), więc rola aplikacyjna musi mieć do niej
+-- prawo wykonania — inaczej każde zapytanie kończy się
+-- „permission denied for function uid". Funkcja tylko czyta ustawienie
+-- transakcyjne, niczego nie zmienia i nie omija RLS.
+grant execute on function public.uid()                      to authenticated, astera_api;
 
 -- Tylko funkcje, których naprawdę używa aplikacja i polityki.
 -- Wyzwalacze i funkcje SECURITY DEFINER wywołują się z wnętrza bazy,
 -- więc nie muszą być dostępne dla roli `authenticated`.
-grant execute on function public.moja_rola()                to authenticated;
-grant execute on function public.jestem_adminem()           to authenticated;
-grant execute on function public.jestem_instruktorem()      to authenticated;
-grant execute on function public.prowadze_kurs(uuid)        to authenticated;
-grant execute on function public.zapisany_na_kurs(uuid)     to authenticated;
-grant execute on function public.moge_czytac_kurs(uuid)     to authenticated;
-grant execute on function public.kurs_etapu(uuid)           to authenticated;
-grant execute on function public.kurs_ze_sciezki(text)      to authenticated;
+grant execute on function public.moja_rola()                to authenticated, astera_api;
+grant execute on function public.jestem_adminem()           to authenticated, astera_api;
+grant execute on function public.jestem_instruktorem()      to authenticated, astera_api;
+grant execute on function public.prowadze_kurs(uuid)        to authenticated, astera_api;
+grant execute on function public.zapisany_na_kurs(uuid)     to authenticated, astera_api;
+grant execute on function public.moge_czytac_kurs(uuid)     to authenticated, astera_api;
+grant execute on function public.kurs_etapu(uuid)           to authenticated, astera_api;
+grant execute on function public.kurs_ze_sciezki(text)      to authenticated, astera_api;
 
 -- NIE nadajemy prawa wykonania:
 --   ustanow_pierwszego_admina(text)  — droga inicjalizacyjna, tylko z SQL Editora
@@ -279,6 +316,6 @@ grant execute on function public.kurs_ze_sciezki(text)      to authenticated;
 -- dopisał tu grant na `ustanow_pierwszego_admina`, powstałaby publiczna
 -- droga podniesienia roli. Pilnuje tego test bazy 20.
 revoke all on function public.ustanow_pierwszego_admina(text)
-  from public, anon, authenticated, service_role;
+  from public, anon, authenticated, astera_api, service_role;
 revoke all on function public.kontekst_inicjalizacji()
-  from public, anon, authenticated, service_role;
+  from public, anon, authenticated, astera_api, service_role;

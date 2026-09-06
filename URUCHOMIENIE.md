@@ -310,6 +310,64 @@ zapytanie i tak przechodzi przez polityki RLS i nie zwraca nic,
 czego mu nie wolno. Serwer deweloperski nie ma ani jednego warunku
 typu „jeśli rola == admin". Ustawia tylko tożsamość i oddaje decyzję bazie.
 
+### 4.1 Tożsamość zalogowanego — mechanizm obowiązujący
+
+Wprowadzone w Etapie 0 migracji na AWS. Zastępuje `auth.uid()` Supabase.
+
+**Wzorzec, od którego nie ma odstępstw.** Każde zapytanie w imieniu
+użytkownika wykonuje się w jawnej transakcji, z tożsamością ustawioną
+na jej zakres:
+
+```
+BEGIN
+select set_config('astera.uzytkownik', <uuid>, true);   -- true = LOCAL
+… zapytania …
+COMMIT
+```
+
+Czyta to funkcja `public.uid()`. Bez ustawienia zwraca `NULL`, a polityki
+RLS nie przepuszczają wtedy niczego.
+
+**Trzy rzeczy, które trzeba wiedzieć, żeby tego nie zepsuć.**
+
+**1. `set_config(..., true)`, nigdy `SET`.**
+`SET LOCAL x = $1` nie istnieje — PostgreSQL nie przyjmuje w tym poleceniu
+parametru. Jedyną formą pozwalającą podać wartość bezpiecznie, bez sklejania
+SQL-a z danych, jest `set_config` z trzecim argumentem `true`. Wariant
+`false` ustawia wartość **na całe połączenie** i przy współdzielonej puli
+przenosi tożsamość na kolejnego użytkownika. To jest dokładnie ten błąd,
+który test 22 potrafi wykryć.
+
+**2. Bez jawnej transakcji to nie działa.**
+W trybie autozatwierdzania ustawienie lokalne wygasa razem z poleceniem,
+które je wykonało — czyli **zanim** przyjdzie właściwe zapytanie. Kod wygląda
+poprawnie, a tożsamości nie ma. Objaw: zapytania zwracają zero wierszy bez
+żadnego błędu.
+
+**3. Stan domyślny to „nikt", nie „poprzedni".**
+Połączenie wracające do puli nie może zabrać ze sobą cudzej tożsamości.
+Przy własnej puli po stronie Core należy zwracać połączenie czyste
+(`DISCARD ALL` albo równoważne ustawienie proxy).
+
+**Rola bazodanowa.** Aplikacja łączy się rolą `astera_api`: bez
+`BYPASSRLS`, bez `SUPERUSER`, niebędącą właścicielem tabel. Lokalnie rola
+jest `NOLOGIN` i wchodzi się w nią przez `SET ROLE`; na Aurorze dostanie
+`LOGIN` i poświadczenia z menedżera sekretów — hasła nie ma w repozytorium.
+
+**Kontekst inicjalizacji.** Flaga `astera.inicjalizacja` przepuszcza nadanie
+pierwszych ról przy zakładaniu bazy. Działa wyłącznie w transakcji i tylko
+wtedy, gdy **nikt nie jest zalogowany** (`public.uid() is null`) i gdy robi
+to rola inna niż aplikacyjna. Ktokolwiek działa przez Core ma ustawioną
+tożsamość i tym samym jest tu odcięty, niezależnie od tego, jaką flagę sobie
+ustawi. Pilnują tego testy 19 i 20.
+
+**Czym to jest sprawdzone.** Test 22 w `testy/bezpieczenstwo.js`: 30 żądań
+przez pulę 3 połączeń, każde z inną tożsamością — żadne nie widzi cudzych
+danych; żądania bez tożsamości widzą zero wierszy. Trzecia część testu
+celowo używa ustawienia sesyjnego i sprawdza, że tożsamość **zostaje** na
+połączeniu — bez tego nie wiedzielibyśmy, czy test w ogóle potrafi wykryć
+błąd.
+
 ---
 
 ## 5 · Czego potrzebuję od Ciebie, żeby ruszyć na produkcję
