@@ -187,6 +187,17 @@ function atrapaSupabase(tabele, kontekst) {
   const KONTRAKT = oknoL.KONTRAKT_DANYCH;
 
   /* ══ WARSTWA SUPABASE — atrapa klienta na prawdziwych wierszach ══ */
+  // Przygotowanie danych dla testu 9: dane startowe nie zawierają
+  // ani jednego pytania, a atrapa Supabase działa na migawce tabel
+  // pobranej niżej — bez tego wiersza obie warstwy zwracają pustą
+  // listę i test nie ma czego porównać.
+  await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do kontraktow'`);
+  await db.query(
+    `insert into public.pytanie (kursant_id, kurs_id, tresc)
+     values ('33333333-3333-3333-3333-333333333333',
+             'aaaaaaaa-0000-0000-0000-000000000001',
+             'Pytanie kontrolne do kontraktow')`);
+
   const TABELE = {};
   for (const t of ['profile', 'kurs', 'lekcja', 'etap', 'material', 'postep',
                    'przypisanie', 'pytanie', 'widok_kursanci'])
@@ -318,6 +329,7 @@ function atrapaSupabase(tabele, kontekst) {
 
   /* ══ podsumowanie ════════════════════════════════════════════ */
   await db.query(`delete from public.zaproszenie where email = 'kontrakt@przyklad.pl'`);
+  await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do kontraktow'`);
   const zdane = wyniki.filter(w => w.zdal).length;
   console.log(`\n═══ KONTRAKTY: ${zdane} / ${wyniki.length} ═══`);
   if (zdane < wyniki.length) {
