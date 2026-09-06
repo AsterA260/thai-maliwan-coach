@@ -28,9 +28,7 @@ const { Client } = require('pg');
 
 const KATALOG = path.join(__dirname, '..', 'db', 'migracje');
 
-const POLACZENIE = process.env.DATABASE_URL
-  ? { connectionString: process.env.DATABASE_URL }
-  : { host: '/tmp', port: 5433, user: 'postgres', database: 'coach' };
+const POLACZENIE = require('../testy/polaczenie').DB;
 
 const tryb = process.argv.includes('--stan')  ? 'stan'
            : process.argv.includes('--sucho') ? 'sucho'

@@ -37,7 +37,7 @@ const DOZWOLONE = {
   inny:    ['application/octet-stream','text/plain'],
 };
 
-const pool = new Pool({ host: '/tmp', port: 5433, user: 'postgres', database: 'coach', max: 8 });
+const pool = new Pool({ ...require('../testy/polaczenie').DB, max: 8 });
 
 /* ══ SESJE ═══════════════════════════════════════════════════════ */
 const sesje = new Map();                     // token -> { uid, wygasa }

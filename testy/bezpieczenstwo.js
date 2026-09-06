@@ -15,7 +15,7 @@
  */
 const { Client } = require('pg');
 
-const DB = { host: '/tmp', port: 5433, user: 'postgres', database: 'coach' };
+const { DB } = require('./polaczenie');
 
 const KTO = {
   norbert : '11111111-1111-1111-1111-111111111111', // admin

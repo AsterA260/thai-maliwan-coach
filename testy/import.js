@@ -27,8 +27,12 @@ function sprawdz(nr, opis, warunek, szczegol) {
 function zaimportuj() {
   const sql = execFileSync('python3', [path.join(KATALOG,'db','import_xlsx.py'), XLSX],
     { encoding: 'utf8', maxBuffer: 32*1024*1024 });
-  execFileSync('psql', ['-h','/tmp','-p','5433','-U','postgres','-d','coach',
-    '-v','ON_ERROR_STOP=1','-q','-f','-'], { input: sql, encoding: 'utf8' });
+  // Ten sam wybór bazy co w polaczenie.js: DATABASE_URL albo lokalny socket.
+  const cel = process.env.DATABASE_URL
+    ? [process.env.DATABASE_URL]
+    : ['-h','/tmp','-p','5433','-U','postgres','-d','coach'];
+  execFileSync('psql', [...cel, '-v','ON_ERROR_STOP=1','-q','-f','-'],
+    { input: sql, encoding: 'utf8' });
 }
 
 const licz = async (sql, p=[]) => Number((await db.query(sql, p)).rows[0].n);
@@ -37,7 +41,7 @@ const licz = async (sql, p=[]) => Number((await db.query(sql, p)).rows[0].n);
   console.log('\n═══ TESTY IMPORTU Z XLSX ═══');
   console.log('Ponowny import nie może niczego skasować ani zdublować\n');
 
-  db = new Client({ host:'/tmp', port:5433, user:'postgres', database:'coach' });
+  db = new Client(require('./polaczenie').DB);
   await db.connect();
 
   /* ── stan wyjściowy ─────────────────────────────────────────── */

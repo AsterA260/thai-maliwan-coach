@@ -163,7 +163,7 @@ function atrapaSupabase(tabele, kontekst) {
   for (let i = 0; i < 40; i++) {
     try { await fetch(BAZA + '/api/ja'); break; } catch { await spij(150); }
   }
-  db = new Client({ host: '/tmp', port: 5433, user: 'postgres', database: 'coach' });
+  db = new Client(require('./polaczenie').DB);
   await db.connect();
 
   /* ══ WARSTWA LOKALNA — prawdziwy serwer, prawdziwe ciasteczko ══ */
