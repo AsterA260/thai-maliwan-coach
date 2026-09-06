@@ -33,6 +33,6 @@ fi
 SEKRET=$(aws secretsmanager get-secret-value --secret-id "$ARN" --region "$REGION" \
            --query SecretString --output text)
 UZYTK=$(printf '%s' "$SEKRET" | jq -r .username)
-HASLO=$(printf '%s' "$SEKRET" | jq -r .password | jq -sRr @uri)
+HASLO=$(printf '%s' "$SEKRET" | jq -r '.password|@uri')   # jedno jq: bez doklejonego znaku nowej linii
 
 printf 'postgresql://%s:%s@%s:5432/coach?sslmode=require\n' "$UZYTK" "$HASLO" "$HOST"

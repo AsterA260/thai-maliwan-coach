@@ -574,3 +574,151 @@ klucz o złym kształcie daje z funkcji `NULL`, a `NULL = uuid` to `NULL`,
 którego CHECK **nie odrzuca**, bo odrzuca wyłącznie `FALSE`. Ten sam człon
 dołożyliśmy przy materiałach, gdzie dotąd ratowała nas polityka RLS.
 Wykrył to test 27.
+
+---
+
+## 8 · Aurora i RDS Proxy — jak to uruchomić naprawdę        [Etap 1b]
+
+Wszystko poniżej zostało wykonane i zmierzone 6 września 2026 na koncie
+AWS Norberta, w regionie `eu-central-1` (Frankfurt). To nie jest plan.
+
+### 8.1 Adres bazy i hasła
+
+Żaden plik w repozytorium nie zawiera hasła. Adres bazy powstaje
+w chwili uruchomienia z AWS Secrets Manager:
+
+```sh
+export AWS_REGION=eu-central-1
+export DATABASE_URL="$(narzedzia/aurora-url.sh)"            # właściciel (postgres)
+export DATABASE_URL="$(narzedzia/aurora-url.sh api)"        # login astera_api
+export DATABASE_URL="$(narzedzia/aurora-url.sh api proxy)"  # astera_api przez RDS Proxy
+```
+
+Sekrety: hasło właściciela zarządza sam AWS (`ManageMasterUserPassword`),
+hasło `astera_api` leży w `astera-coach/etap1b/astera_api`. Nikt go nie
+widział — wygenerował je `get-random-password` prosto do sekretu.
+
+### 8.2 TLS — dwa różne łańcuchy
+
+Aurora ma certyfikat z łańcucha **Amazon RDS**, RDS Proxy — z **Amazon
+Trust Services** (systemowe CA). Pełna weryfikacja na obu drogach wymaga
+jednego pliku z oboma zestawami:
+
+```sh
+curl -sSo /opt/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+cat /opt/global-bundle.pem /etc/pki/tls/certs/ca-bundle.crt > /opt/ca-aurora-i-proxy.pem
+export PGSSLROOTCERT=/opt/ca-aurora-i-proxy.pem
+```
+
+`testy/polaczenie.js` zdejmuje `sslmode` z adresu i ustawia TLS wprost:
+z `PGSSLROOTCERT` weryfikacja jest pełna, bez — tylko szyfrowanie
+(wyłącznie do testów). Sterownik `pg` traktuje `sslmode=require` jak
+`verify-full`, stąd ta gimnastyka.
+
+### 8.3 Skąd uruchamiać
+
+Z kontenera Martina nie wychodzi nic poza portami 80/443 — do bazy
+(5432) nie ma jak się dostać. RDS Proxy nie ma publicznego adresu
+w ogóle. Dlatego testy biegną z małej maszyny EC2 **wewnątrz VPC**
+(`astera-etap1b-runner`, t4g.small), sterowanej po HTTPS przez SSM:
+
+```sh
+narzedzia/runner.sh 'cd /opt/coach && node testy/bezpieczenstwo.js'
+narzedzia/runner.sh - < skrypt.sh
+```
+
+Runner klonuje repo z GitHuba kluczem deploy (tylko odczyt) trzymanym
+w Secrets Manager. Po etapie: instancję zatrzymać albo usunąć.
+
+### 8.4 Kolejność na świeżej Aurorze
+
+Dokładnie ta sama co lokalnie — i to jest cały sens stanu bazowego
+plus migracji: `00` (atrapa Auth, do czasu Cognito) → `01` → `02` →
+`node narzedzia/migruj.js` → `04` → `05`. Potem:
+
+```sh
+printf "alter role astera_api login password :'pw';\n" \
+  | psql "$DATABASE_URL" -v pw="$(aws secretsmanager get-secret-value \
+      --secret-id astera-coach/etap1b/astera_api --query SecretString --output text | jq -r .password)"
+```
+
+Właściciel na RDS to `rds_superuser`, nie superużytkownik — `CREATE ROLE
+... BYPASSRLS` dla `astera_seed` mimo to przeszło.
+
+### 8.5 Co zostało zmierzone
+
+**Pierwszy warunek bezpieczeństwa** — `testy/rola_api_na_zywo.js`, jako
+prawdziwa sesja `astera_api` (nie SET ROLE z konta właściciela): 5/5.
+`SET ROLE astera_seed` → `permission denied`; flaga inicjalizacji nie
+daje nic; `astera_seed` ma jednego członka — właściciela.
+
+**Pełny zestaw testów na Aurorze:** baza 29/29, HTTP 16/16, import 5/5,
+kontrakty 15/15 — 65/65, ten sam kod co lokalnie, zero zmian w testach.
+
+**Test 22 przez RDS Proxy** — `testy/proxy_22_i_pinning.js`: tożsamość
+nie wycieka; 30 żądań przez 3 połączenia, każde widzi tylko swoje.
+
+**Pinning** (metryki `AWS/RDS` dla `ProxyName`):
+
+| wariant | klientów | pauza | tx/s | poł. do bazy | przypięte |
+|---|---|---|---|---|---|
+| set_config (Core) | 20 | 0 | 176 | 21 | = pożyczone |
+| set_local_role (jak testy) | 20 | 0 | 178 | 21 | = pożyczone |
+| set_config (Core) | 60 | 1,5 s | 39 | **31** | = pożyczone |
+| kontrola: nic | 60 | 1,5 s | 38 | 33 | brak |
+
+Wnioski: `set_config(..., true)` przypina połączenie, ale **tylko na
+czas transakcji** — liczba przypiętych była zawsze równa liczbie
+pożyczonych, nigdy nie rosła do liczby klientów. Multipleksowanie
+działa: 60 klientów na 31 połączeniach do bazy. Bez przerw między
+transakcjami (20 klientów bez pauzy) proxy nie ma czego dzielić —
+to własność obciążenia, nie proxy.
+
+### 8.6 Decyzja: WŁASNA PULA Core → Aurora. Proxy nie — i to jest wynik pomiaru
+
+Proxy zdało wszystko, co miało zdać: tożsamość nie wycieka, pinning
+kończy się z transakcją, 60 klientów szło na 31 połączeniach. Gdyby
+pytanie brzmiało „czy działa" — tak. Ale pytanie brzmi „czy się opłaca",
+i tu rozstrzygnął pomiar, którego w planie nie było:
+
+| stan | połączeń do bazy | ACU po 10 min ciszy |
+|---|---|---|
+| przed utworzeniem Proxy (20:44) | 0 | **0 — baza zasnęła** |
+| Proxy bez klientów, `MaxIdleConnectionsPercent=0` (22:06–22:15) | **2** (własne, health-check) | **0,5 — nie zasnęła** |
+
+RDS Proxy trzyma dwa własne połączenia niezależnie od ustawień puli.
+Aurora Serverless v2 usypia się tylko przy zerze połączeń. Skutek:
+z Proxy baza **nigdy** nie schodzi do 0 ACU — minimum 0,5 ACU × 24 h
+≈ 0,06 USD/h ≈ **40–45 USD miesięcznie**, na stałe, za sam fakt
+istnienia Proxy. Nie za ruch. Rachunek za Proxy jako taki
+(~0,015 USD/ACU-h) jest przy tym pomijalny.
+
+Dla zamkniętej platformy szkoły — kilkudziesięciu użytkowników,
+długie okresy ciszy — to jest cały rachunek za bazę, i to w
+najspokojniejszym miesiącu.
+
+**Dlatego:**
+
+1. AsterA Core łączy się z Aurorą **własną pulą** (`pg.Pool`, ok. 10
+   połączeń), jako `astera_api`, z tożsamością przez
+   `set_config(..., true)` — czyli dokładnie tak, jak robi to dziś
+   `serwer/dev.js` w `wTransakcji()`. Test 22 udowodnił szczelność
+   tej puli w procesie — i lokalnie, i na Aurorze.
+2. Proxy **usunięte**. Rola `astera-etap1b-proxy` zostaje: odtworzenie
+   Proxy to jedno polecenie i 10 minut, a kod się nie zmienia — tylko
+   `DATABASE_URL`.
+3. **Kiedy wrócić do Proxy:** gdy Core stanie się rojem krótko
+   żyjących Lambd, które otwierają połączenia lawinowo. Dziś nim nie
+   jest. Wtedy też ~45 USD/mies. będzie kosztem uzasadnionym ruchem,
+   a nie ciszą.
+
+### 8.7 Przed produkcją — zanotowane, nie zrobione
+
+- klaster jest `publicly-accessible` (tylko z IP sesji, port 5432) —
+  przełączyć na prywatny, gdy Core stanie w VPC;
+- `00_supabase_lokalnie.sql` zastąpi Cognito (Etap 2);
+- rola migracyjna na Aurorze to dziś właściciel; docelowo osobny login
+  z `astera_seed`, bez praw dla ruchu aplikacyjnego;
+- klucz `martin-etap1b` i klucz deploy: usunąć po etapie;
+- runner EC2 `astera-etap1b-runner` jest ZATRZYMANY (nie usunięty) — start
+  jednym poleceniem, gdy będzie potrzebny do Etapu 2.
