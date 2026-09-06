@@ -137,8 +137,14 @@ create table if not exists public.material (
   -- ZAMKNIĘCIE LUKI: kurs w rekordzie MUSI być tym samym kursem, co
   -- kurs zapisany w ścieżce pliku. Bez tego dałoby się podpiąć rekord
   -- swojego kursu do pliku należącego do cudzego.
+  --  `is not null` jest częścią warunku, nie ozdobą: ścieżka o złym
+  --  kształcie daje z funkcji NULL, a `NULL = kurs_id` to NULL, którego
+  --  CHECK nie odrzuca — odrzuca wyłącznie FALSE. Dotąd ratowała nas
+  --  tu polityka RLS (prowadze_kurs(NULL) = false), ale opieranie
+  --  całej obrony na jednej warstwie jest kruche.
   constraint material_sciezka_zgodna_z_kursem
-    check (public.kurs_ze_sciezki(sciezka) = kurs_id)
+    check (public.kurs_ze_sciezki(sciezka) is not null
+           and public.kurs_ze_sciezki(sciezka) = kurs_id)
 );
 comment on constraint material_sciezka_zgodna_z_kursem on public.material is
   'Sciezka musi miec ksztalt kurs/<kurs_id>/<typ>/<plik> i wskazywac ten sam kurs.';

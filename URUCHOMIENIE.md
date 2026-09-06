@@ -37,6 +37,10 @@ cd coach
 psql -h /tmp -p 5433 -U postgres -d coach -f db/00_supabase_lokalnie.sql
 psql -h /tmp -p 5433 -U postgres -d coach -f db/01_schema.sql
 psql -h /tmp -p 5433 -U postgres -d coach -f db/02_rls.sql
+
+# migracje — od Etapu 1 schemat rozwija się WYŁĄCZNIE tą drogą
+node narzedzia/migruj.js
+
 psql -h /tmp -p 5433 -U postgres -d coach -f db/04_dane_startowe.sql
 
 # import treści z arkusza
@@ -395,3 +399,98 @@ Bez punktów 1–3 nie da się wystartować. Reszta może poczekać.
 - tłumacza na żywo i nagrywania sesji (osobny etap, wymaga backendu)
 - powiadomień e-mail poza tymi, które wysyła Supabase Auth
 - eksportu do XLSX (import działa; eksport dopiszę, gdy będzie potrzebny)
+
+---
+
+## 7 · Migracje i model treści                      [Etap 1 migracji]
+
+### 7.1 Schemat zmienia się tylko migracjami
+
+Pliki `db/01_schema.sql` i `db/02_rls.sql` to **stan bazowy** — uruchamia się
+je raz, na pustej bazie. Wszystko, co dochodzi później, jest numerowaną
+migracją w `db/migracje/`.
+
+```bash
+node narzedzia/migruj.js           # wykonaj brakujące
+node narzedzia/migruj.js --stan    # co wykonane, co czeka
+node narzedzia/migruj.js --sucho   # plan, bez wykonania
+```
+
+Każda migracja idzie we własnej transakcji — błąd w środku pliku wycofuje
+cały plik, nigdy nie zostaje połowa zmiany.
+
+**Pliku, który już poszedł na bazę, nie edytujemy.** Narzędzie zapamiętuje
+skrót treści i przy zmianie zatrzymuje się z błędem. Powód nie jest
+formalny: baza, na której migracja poszła w starej wersji, i baza zbudowana
+od zera z nowej wyglądałyby na zgodne, nie będąc nimi. Poprawka wchodzi jako
+kolejna migracja.
+
+### 7.2 Język jest daną, nie kolumną
+
+Do Etapu 1 każdy tekst miał parę kolumn `nazwa_pl` / `nazwa_th`. Trzeci
+język oznaczał zmianę schematu, a wersjonowanie wiedzy było niewykonalne.
+
+Teraz teksty leżą w tabelach `*_tekst`, a języki w tabeli `jezyk`.
+**Dodanie języka to jeden wiersz, zero DDL.**
+
+Aplikacja nie wybiera języka sama — robi to baza, w widokach odczytowych:
+
+```
+widok_kurs · widok_lekcja · widok_etap · widok_material
+widok_technika · widok_glosowka
+```
+
+Każdy zwraca płaskie `nazwa`, `opis`, `tytul` w języku zalogowanego,
+a gdy tłumaczenia w jego języku nie ma — po polsku. Ekran pyta o `nazwa`
+i nie wie, że języki w ogóle istnieją.
+
+Skutek uboczny, ale istotny: **tajski wreszcie działa**. Wcześniej kolumny
+`_th` były w bazie od początku, a front czytał wyłącznie `_pl` — w 22
+miejscach, na sztywno.
+
+### 7.3 Wiedza Maliwan jest wersjonowana
+
+`etap`, `technika` i `glosowka` mają wersje. Zatwierdzonej treści nie
+nadpisujemy — każda zmiana tworzy nową wersję.
+
+```
+draft ──► do_zmiany ──► draft
+  └─────► zatwierdzone ──► zastapione
+```
+
+Pilnuje tego baza, nie umowa z zespołem:
+
+- wyzwalacz odrzuca przejścia spoza tej ścieżki,
+- indeks częściowy dopuszcza **jedną** wersję `zatwierdzone` na encję,
+- osobny wyzwalacz broni treści wersji rozstrzygniętej przed edycją,
+- **kursant widzi wyłącznie wersje zatwierdzone** — draftu Maliwan nie
+  zobaczy, bo to treść, której jeszcze nie zatwierdziła.
+
+Tłumaczenia wiszą na **wersji**, nie na encji. Bez tego zatwierdzenie
+polskiej treści po cichu zmieniałoby tajską.
+
+### 7.4 Technika i głosówki
+
+`technika` jest osobnym bytem, bo jedna technika wraca w wielu etapach
+i kursach — a głosówka Maliwan ma być przypięta do techniki, nie do
+miejsca w programie. Powiązanie idzie przez `etap_technika`, z
+`on delete restrict`: skasowanie etapu nie zabierze techniki używanej
+gdzie indziej.
+
+`glosowka` trzyma klucz S3, język źródłowy i powiązanie z **dokładnie
+jedną** encją — techniką albo etapem. Transkrypcja i tłumaczenia to
+wiersze w `glosowka_tekst`; rola wynika z porównania z językiem źródłowym,
+co pokazuje widok `widok_glosowka_tekst`.
+
+Klucz S3 musi wskazywać encję, do której nagranie należy:
+
+```
+glosowka/technika/<uuid techniki>/<uuid glosowki>.<ext>
+glosowka/etap/<uuid etapu>/<uuid glosowki>.<ext>
+```
+
+Pilnuje tego więz CHECK — z jawnym `is not null`. To nie jest ozdobnik:
+klucz o złym kształcie daje z funkcji `NULL`, a `NULL = uuid` to `NULL`,
+którego CHECK **nie odrzuca**, bo odrzuca wyłącznie `FALSE`. Ten sam człon
+dołożyliśmy przy materiałach, gdzie dotąd ratowała nas polityka RLS.
+Wykrył to test 27.

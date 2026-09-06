@@ -118,7 +118,9 @@
      Nigdzie nie ma warunku „jeśli rola == kursant, to…".
      Zapytania są takie same dla wszystkich — przycina je RLS.     */
   async function kursy() {
-    const { data, error } = await sb.from('kurs')
+    // widok_kurs zwraca `nazwa` i `opis` już w języku zalogowanego —
+    // wybór języka robi baza, nie ekran.
+    const { data, error } = await sb.from('widok_kurs')
       .select('*, profile:instruktor_id (imie)').order('dni');
     if (error) blad(error, 'Nie udało się wczytać kursów.');
     return (data || []).map(k => ({ ...k, instruktor: k.profile && k.profile.imie }));
@@ -129,10 +131,10 @@
       co innego niż „kurs bez etapów". */
   async function kurs(kursId) {
     const [lekcje, etapy, materialy, postepy] = await Promise.all([
-      sb.from('lekcja').select('*').eq('kurs_id', kursId).order('kolejnosc'),
-      sb.from('etap').select('*, lekcja!inner(kurs_id)')
+      sb.from('widok_lekcja').select('*').eq('kurs_id', kursId).order('kolejnosc'),
+      sb.from('widok_etap').select('*, lekcja!inner(kurs_id)')
         .eq('lekcja.kurs_id', kursId).order('kolejnosc'),
-      sb.from('material').select('*').eq('kurs_id', kursId).order('nazwa_pl'),
+      sb.from('widok_material').select('*').eq('kurs_id', kursId).order('nazwa'),
       sb.from('postep').select('*, etap!inner(lekcja!inner(kurs_id))')
         .eq('etap.lekcja.kurs_id', kursId),
     ]);
@@ -158,12 +160,12 @@
   /* ── PYTANIA ───────────────────────────────────────────────── */
   async function pytania() {
     const { data, error } = await sb.from('pytanie')
-      .select('*, kursant:kursant_id (imie), kurs:kurs_id (nazwa_pl), odp:odpowiedzial_id (imie)')
+      .select('*, kursant:kursant_id (imie), kurs:kurs_id (nazwa), odp:odpowiedzial_id (imie)')
       .order('utworzone', { ascending: false });
     if (error) blad(error, 'Nie udało się wczytać pytań.');
     return (data || []).map(p => ({ ...p,
       kursant: p.kursant && p.kursant.imie,
-      kurs: p.kurs && p.kurs.nazwa_pl,
+      kurs: p.kurs && p.kurs.nazwa,
       odpowiedzial: p.odp && p.odp.imie }));
   }
 
@@ -194,12 +196,12 @@
   /* ── PLIKI — prywatny bucket, podpisany link na 5 minut ────── */
   async function linkDoMaterialu(materialId) {
     // RLS zwróci wiersz tylko temu, kto ma prawo go widzieć
-    const { data: m } = await sb.from('material')
-      .select('sciezka, nazwa_pl').eq('id', materialId).maybeSingle();
+    const { data: m } = await sb.from('widok_material')
+      .select('sciezka, nazwa').eq('id', materialId).maybeSingle();
     if (!m) throw new Error('Nie masz dostępu do tego materiału.');
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(m.sciezka, 300);
     if (error || !data) throw new Error('Nie masz dostępu do tego pliku.');
-    return { link: data.signedUrl, nazwa: m.nazwa_pl, wazny_s: 300 };
+    return { link: data.signedUrl, nazwa: m.nazwa, wazny_s: 300 };
   }
 
   const LIMIT_B = 25 * 1024 * 1024;
@@ -231,10 +233,19 @@
     if (bladPliku) throw new Error('Nie udało się wgrać pliku: ' + bladPliku.message);
 
     const { data: { user } } = await sb.auth.getUser();
+    // Nazwa i opis idą do tabeli tłumaczeń, nie do kolumny materiału.
     const w = await sb.from('material').insert({
-      kurs_id, etap_id: etap_id || null, typ, nazwa_pl: nazwa, opis: opis || null,
+      kurs_id, etap_id: etap_id || null, typ,
       sciezka, rozmiar_b: plik.size, mime, opublikowany: false, dodal_id: user.id
     }).select();
+    if (!w.error && w.data && w.data[0]) {
+      const { data: ja } = await sb.from('profile').select('jezyk').eq('id', user.id).maybeSingle();
+      const { error: bladTekstu } = await sb.from('material_tekst').insert({
+        material_id: w.data[0].id, jezyk: (ja && ja.jezyk) || 'pl',
+        nazwa, opis: opis || null });
+      if (bladTekstu) { w.error = bladTekstu; w.data = null; }
+      else w.data[0].nazwa = nazwa;
+    }
 
     try {
       return zmieniony(w, 'Nie masz uprawnień do tego kursu — plik nie został zapisany.');

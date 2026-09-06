@@ -303,7 +303,7 @@ function pokaz(nazwa){
 function rysujWyborKursu(){
   $('wyborKursu').innerHTML = KURSY.map(k =>
     `<button class="przycisk ${k.id===KURS?.id?'glowny':'cichy'}" data-kurs="${k.id}">
-       ${esc(k.nazwa_pl)}</button>`).join('');
+       ${esc(k.nazwa)}</button>`).join('');
   $('wyborKursu').querySelectorAll('[data-kurs]').forEach(b =>
     b.onclick = () => wczytajKurs(KURSY.find(k => k.id === b.dataset.kurs)));
 }
@@ -325,7 +325,7 @@ async function wczytajKurs(k){
     TRESC = await DANE.kurs(k.id);
   } catch (e) { $('etapyStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
   pusto($('etapyStan'));
-  $('tytulKursu').textContent = k.nazwa_pl;
+  $('tytulKursu').textContent = k.nazwa;
   $('podtytulKursu').textContent =
     `${k.dni} dni · ${k.godzin} godzin praktyki · ${TRESC.etapy.length} etapów`;
   rysujWyborKursu(); rysujEtapy(); rysujMaterialyKursanta();
@@ -347,15 +347,15 @@ function rysujEtapy(){
       const gotowy = stanEtapu(x.id) === 'zrobione';
       return `<button class="kafel ${i===AKTYWNY?'teraz':''} ${gotowy?'gotowy':''}"
         style="left:${50+R*Math.cos(a)}%;top:${50+R*Math.sin(a)}%" data-i="${i}"
-        title="${esc(x.nazwa_pl)}">
+        title="${esc(x.nazwa)}">
         <span class="ikonka">${esc(x.ikona||'•')}</span>
         <span class="nr">${String(i+1).padStart(2,'0')} · ${esc(x.godzina||'')}</span>
-        <span class="co">${esc(x.nazwa_pl)}</span></button>`;
+        <span class="co">${esc(x.nazwa)}</span></button>`;
     }).join('') +
     (() => { const x = e[AKTYWNY]; return `<div class="medalion">
       <div><div class="nr">${String(AKTYWNY+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</div>
-      <h2>${esc(x.nazwa_pl)}</h2>
-      <p>${esc((x.cel_pl||'').slice(0,110))}</p></div></div>`; })();
+      <h2>${esc(x.nazwa)}</h2>
+      <p>${esc((x.cel||'').slice(0,110))}</p></div></div>`; })();
 
   $('lista').innerHTML = e.map((x,i) => {
     const gotowy = stanEtapu(x.id) === 'zrobione';
@@ -363,7 +363,7 @@ function rysujEtapy(){
       <span class="ikonka">${esc(x.ikona||'•')}</span>
       <span class="srodek">
         <span class="czas">${String(i+1).padStart(2,'0')} · ${esc(x.godzina||'')} · ${x.czas_min||'–'} min</span>
-        <span class="co">${esc(x.nazwa_pl)}</span></span>
+        <span class="co">${esc(x.nazwa)}</span></span>
       <span class="znacznik">${gotowy ? '✓' : ''}</span></button>`;
   }).join('');
 
@@ -385,17 +385,17 @@ function otworzEtap(x){
     <div class="rzad" style="justify-content:space-between">
       <span class="plakietka">${esc(x.godzina||'')} · ${x.czas_min||'–'} min</span>
       <button class="przycisk cichy" id="zamknij">Zamknij</button></div>
-    <h2>${esc(x.ikona||'')} ${esc(x.nazwa_pl)}</h2>
-    ${w('Cel', x.cel_pl)}
-    ${w('Agent mówi', x.agent_mowi_pl, 'cytat')}
-    ${w('Maliwan pokazuje', x.pokazuje_pl)}
-    ${w('Kursanci robią', x.kursanci_robia_pl)}
-    ${w('Na co uważać', x.uwaga_pl, 'ostrzezenie')}
-    ${w('Podsumowanie', x.podsumowanie_pl)}
+    <h2>${esc(x.ikona||'')} ${esc(x.nazwa)}</h2>
+    ${w('Cel', x.cel)}
+    ${w('Agent mówi', x.agent_mowi, 'cytat')}
+    ${w('Maliwan pokazuje', x.pokazuje)}
+    ${w('Kursanci robią', x.kursanci_robia)}
+    ${w('Na co uważać', x.uwaga, 'ostrzezenie')}
+    ${w('Podsumowanie', x.podsumowanie)}
     ${pyt}
     ${mat.length ? `<div class="wiersz"><span class="co">Materiały do tego etapu</span>
       <div class="rzad">${mat.map(m => `<button class="przycisk cichy" data-otworz="${m.id}">
-        ${esc(m.nazwa_pl)}</button>`).join('')}</div></div>` : ''}
+        ${esc(m.nazwa)}</button>`).join('')}</div></div>` : ''}
     <div class="rzad">
       ${JA.rola === 'kursant'
         ? `<button class="przycisk ${gotowy?'cichy':'glowny'}" id="oznacz">
@@ -436,7 +436,7 @@ function rysujMaterialyKursanta(){
          <div class="rzad"><span class="plakietka">${esc(x.typ)}</span>
          ${x.opublikowany ? '' : '<span class="plakietka ukryty">nieopublikowany</span>'}
          ${x.rozmiar_b ? `<span class="cicho">${rozmiar(Number(x.rozmiar_b))}</span>` : ''}</div>
-         <b>${esc(x.nazwa_pl)}</b>
+         <b>${esc(x.nazwa)}</b>
          ${x.opis ? `<span class="cicho">${esc(x.opis)}</span>` : ''}
          <div class="rzad"><button class="przycisk cichy" data-otworz="${x.id}">
            Otwórz / pobierz</button></div></div>`).join('')}</div>`
@@ -479,28 +479,28 @@ $('mDodaj').onclick = () => zPrzyciskiem($('mDodaj'), 'Wgrywam…', async () => 
     // lokalnie i na produkcji. Różni się tylko to, co siedzi pod spodem.
     const m = await DANE.wgrajMaterial({ kurs_id: $('mKurs').value, typ: $('mTyp').value,
                                          nazwa, plik });
-    powiadom(`Wgrane: ${m.nazwa_pl}. Kursanci zobaczą po opublikowaniu.`);
+    powiadom(`Wgrane: ${m.nazwa}. Kursanci zobaczą po opublikowaniu.`);
     $('mNazwa').value = ''; $('mPlik').value = ''; $('mPlikNapis').textContent = 'Wybierz plik…';
     rysujMaterialy();
   } catch (e) { powiadom(e.message, 'zle'); }
 });
 
 async function rysujMaterialy(){
-  $('mKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  $('mKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa)}</option>`).join('');
   wczytuje($('matStan'), 'Wczytuję materiały…');
   $('tabMaterialy').innerHTML = '';
   const wsz = [];
   try {
     for (const k of KURSY){
       const d = await DANE.kurs(k.id);
-      d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa_pl }));
+      d.materialy.forEach(m => wsz.push({ ...m, kurs: k.nazwa }));
     }
   } catch (e) { $('matStan').innerHTML = `<div class="karta pusto">${esc(e.message)}</div>`; return; }
   pusto($('matStan'));
   $('tabMaterialy').innerHTML = wsz.length ? `
     <tr><th>Materiał</th><th>Kurs</th><th>Typ</th><th>Stan</th><th></th></tr>` +
     wsz.map(m => `<tr>
-      <td>${esc(m.nazwa_pl)}
+      <td>${esc(m.nazwa)}
         <div class="cicho" style="font-size:11px">${esc(m.sciezka)}</div></td>
       <td class="cicho">${esc(m.kurs)}</td>
       <td><span class="plakietka">${esc(m.typ)}</span>
@@ -512,7 +512,7 @@ async function rysujMaterialy(){
         ${m.rozmiar_b ? `<button class="przycisk cichy" data-otworz="${m.id}">Otwórz</button>` : ''}
         <button class="przycisk cichy" data-pub="${m.id}" data-stan="${m.opublikowany}">
           ${m.opublikowany ? 'Ukryj' : 'Opublikuj'}</button>
-        <button class="przycisk cichy" data-usun="${m.id}" data-nazwa="${esc(m.nazwa_pl)}">Usuń</button>
+        <button class="przycisk cichy" data-usun="${m.id}" data-nazwa="${esc(m.nazwa)}">Usuń</button>
       </div></td></tr>`).join('')
     : '<tr><td class="pusto">Brak materiałów.</td></tr>';
 
@@ -656,7 +656,7 @@ async function rysujPrzypisania(){
   if (!KONTA.length) KONTA = await DANE.konta();
   $('pKursant').innerHTML = KONTA.filter(k => k.rola === 'kursant' && k.aktywne)
     .map(k => `<option value="${k.id}">${esc(k.imie)} — ${esc(k.email)}</option>`).join('');
-  $('pKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa_pl)}</option>`).join('');
+  $('pKurs').innerHTML = KURSY.map(k => `<option value="${k.id}">${esc(k.nazwa)}</option>`).join('');
   const el = $('tabPrzypisania');
   el.innerHTML = '<tr><td class="pusto"><span class="kreci"></span></td></tr>';
   const k = await DANE.kursanci();

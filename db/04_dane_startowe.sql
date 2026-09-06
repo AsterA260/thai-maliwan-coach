@@ -35,23 +35,34 @@ insert into public.profile (id, email, imie, rola, jezyk) values
  ('33333333-3333-3333-3333-333333333333','ania@przyklad.pl',      'Ania',   'kursant','pl'),
  ('44444444-4444-4444-4444-444444444444','piotr@przyklad.pl',     'Piotr',  'kursant','pl'),
  ('55555555-5555-5555-5555-555555555555','ktos@obcy.pl',          'Ktoś Obcy','kursant','pl')
-on conflict (id) do update set rola = excluded.rola, imie = excluded.imie;
+on conflict (id) do update set rola  = excluded.rola,
+                               imie  = excluded.imie,
+                               jezyk = excluded.jezyk;
+--  `jezyk` doszedł do listy aktualizowanych pól świadomie: profil
+--  powstaje z wyzwalacza z domyślnym 'pl', więc bez tego Maliwan
+--  zostawała po polsku mimo wpisu 'th' wyżej — i tajski nie miał jak
+--  się pokazać nawet po wprowadzeniu tłumaczeń.
 
 -- ── 3. KURSY (nazwy zgodne z thaimaliwan.pl/szkola) ──────────────
-insert into public.kurs (id, kod, nazwa_pl, nazwa_th, dni, godzin, cena_gr,
-                         instruktor_id, opublikowany) values
- ('aaaaaaaa-0000-0000-0000-000000000001','podstawowy',
-  'Tradycyjny masaż tajski','นวดแผนไทยดั้งเดิม', 2, 12, 190000,
+insert into public.kurs (id, kod, dni, godzin, cena_gr, instruktor_id, opublikowany) values
+ ('aaaaaaaa-0000-0000-0000-000000000001','podstawowy',    2, 12, 190000,
   '22222222-2222-2222-2222-222222222222', true),
- ('aaaaaaaa-0000-0000-0000-000000000002','mistrzowski',
-  'Rozszerzony masaż tajski','นวดแผนไทยขั้นขยาย', 3, 18, 260000,
+ ('aaaaaaaa-0000-0000-0000-000000000002','mistrzowski',   3, 18, 260000,
   '22222222-2222-2222-2222-222222222222', true),
- ('aaaaaaaa-0000-0000-0000-000000000003','profesjonalny',
-  'Kompleksowe szkolenie praktyczne','หลักสูตรปฏิบัติแบบครบวงจร', 5, 30, 390000,
+ ('aaaaaaaa-0000-0000-0000-000000000003','profesjonalny', 5, 30, 390000,
   '22222222-2222-2222-2222-222222222222', false)   -- jeszcze nieopublikowany
 on conflict (kod) do update set
-  nazwa_pl = excluded.nazwa_pl, nazwa_th = excluded.nazwa_th,
   instruktor_id = excluded.instruktor_id, opublikowany = excluded.opublikowany;
+
+-- Nazwy i opisy kursów — po jednym wierszu na język.
+insert into public.kurs_tekst (kurs_id, jezyk, nazwa) values
+ ('aaaaaaaa-0000-0000-0000-000000000001','pl','Tradycyjny masaż tajski'),
+ ('aaaaaaaa-0000-0000-0000-000000000001','th','นวดแผนไทยดั้งเดิม'),
+ ('aaaaaaaa-0000-0000-0000-000000000002','pl','Rozszerzony masaż tajski'),
+ ('aaaaaaaa-0000-0000-0000-000000000002','th','นวดแผนไทยขั้นขยาย'),
+ ('aaaaaaaa-0000-0000-0000-000000000003','pl','Kompleksowe szkolenie praktyczne'),
+ ('aaaaaaaa-0000-0000-0000-000000000003','th','หลักสูตรปฏิบัติแบบครบวงจร')
+on conflict (kurs_id, jezyk) do update set nazwa = excluded.nazwa;
 
 -- ── 4. PRZYPISANIA ───────────────────────────────────────────────
 --  Ania  → podstawowy
@@ -65,24 +76,49 @@ insert into public.przypisanie (kurs_id, kursant_id, przypisal_id) values
 on conflict (kurs_id, kursant_id) do nothing;
 
 -- ── 5. LEKCJA I ETAPY KURSU MISTRZOWSKIEGO (skrót, do testów) ────
-insert into public.lekcja (id, kurs_id, dzien, tytul_pl, tytul_th, kolejnosc, opublikowana)
+insert into public.lekcja (id, kurs_id, dzien, kolejnosc, opublikowana)
 values ('bbbbbbbb-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000002',
-        1,'Dzień 1 — stopy','วันที่ 1 — เท้า',1,true)
+        1, 1, true)
 on conflict (kurs_id, dzien) do nothing;
 
-insert into public.etap (lekcja_id, kod, godzina, ikona, nazwa_pl, nazwa_th,
-                         czas_min, cel_pl, kolejnosc, opublikowany)
-values ('bbbbbbbb-0000-0000-0000-000000000001','M1-01','09:00','🙏',
-        'Powitanie i zasady','ต้อนรับและกฎ',30,
-        'Grupa zna plan i zasady bezpieczeństwa.',1,true)
+insert into public.lekcja_tekst (lekcja_id, jezyk, tytul) values
+ ('bbbbbbbb-0000-0000-0000-000000000001','pl','Dzień 1 — stopy'),
+ ('bbbbbbbb-0000-0000-0000-000000000001','th','วันที่ 1 — เท้า')
+on conflict (lekcja_id, jezyk) do update set tytul = excluded.tytul;
+
+insert into public.etap (id, lekcja_id, kod, godzina, ikona, czas_min, kolejnosc, opublikowany)
+values ('dddddddd-0000-0000-0000-000000000001',
+        'bbbbbbbb-0000-0000-0000-000000000001','M1-01','09:00','🙏',30,1,true)
 on conflict (lekcja_id, kod) do nothing;
 
+-- Treść etapu jest teraz WERSJĄ. Dane startowe wstawiają ją od razu
+-- jako zatwierdzoną — to treść, z której realnie się korzysta.
+insert into public.etap_wersja (id, etap_id, numer, status, autor_id,
+                                zatwierdzil_id, zatwierdzone_o, komentarz)
+values ('eeeeeeee-0000-0000-0000-000000000001',
+        'dddddddd-0000-0000-0000-000000000001', 1, 'zatwierdzone',
+        '22222222-2222-2222-2222-222222222222',
+        '11111111-1111-1111-1111-111111111111', now(),
+        'Treść startowa.')
+on conflict (etap_id, numer) do nothing;
+
+insert into public.etap_tekst (etap_wersja_id, jezyk, nazwa, cel) values
+ ('eeeeeeee-0000-0000-0000-000000000001','pl','Powitanie i zasady',
+  'Grupa zna plan i zasady bezpieczeństwa.'),
+ ('eeeeeeee-0000-0000-0000-000000000001','th','ต้อนรับและกฎ',
+  'กลุ่มรู้แผนและกฎความปลอดภัย')
+on conflict (etap_wersja_id, jezyk) do update set nazwa = excluded.nazwa;
+
 -- ── 6. MATERIAŁ TYLKO DLA KURSU MISTRZOWSKIEGO ───────────────────
-insert into public.material (id, kurs_id, typ, nazwa_pl, sciezka, opublikowany, dodal_id)
+insert into public.material (id, kurs_id, typ, sciezka, opublikowany, dodal_id)
 values ('cccccccc-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000002',
-        'pdf','Mapa stref na stopie',
-        'kurs/aaaaaaaa-0000-0000-0000-000000000002/pdf/mapa-stref.pdf', true,
+        'pdf','kurs/aaaaaaaa-0000-0000-0000-000000000002/pdf/mapa-stref.pdf', true,
         '22222222-2222-2222-2222-222222222222')
 on conflict (sciezka) do nothing;
+
+insert into public.material_tekst (material_id, jezyk, nazwa) values
+ ('cccccccc-0000-0000-0000-000000000001','pl','Mapa stref na stopie'),
+ ('cccccccc-0000-0000-0000-000000000001','th','แผนที่โซนบนเท้า')
+on conflict (material_id, jezyk) do update set nazwa = excluded.nazwa;
 
 commit;

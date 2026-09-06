@@ -89,6 +89,28 @@ async function zapytaj(uid, sql, params = []) {
   } finally { k.release(); }
 }
 
+/** Kilka zapytań w JEDNEJ transakcji, z jedną tożsamością.
+ *  Potrzebne wszędzie tam, gdzie drugi zapis zależy od pierwszego —
+ *  na przykład materiał i jego tłumaczenie. Zapisu takiego NIE DA SIĘ
+ *  zrobić jednym poleceniem z CTE: wiersz wstawiony w CTE nie jest
+ *  jeszcze widoczny dla polityki RLS drugiego zapisu, więc polityka
+ *  odrzuca go jako sierotę. Dwa polecenia w jednej transakcji widzą
+ *  się nawzajem i zachowują atomowość. */
+async function wTransakcji(uid, praca) {
+  const k = await pool.connect();
+  try {
+    await k.query('begin');
+    await k.query('set local role astera_api');
+    if (uid) await k.query(`select set_config('astera.uzytkownik',$1,true)`, [uid]);
+    const wynik = await praca(async (sql, params = []) => (await k.query(sql, params)).rows);
+    await k.query('commit');
+    return wynik;
+  } catch (e) {
+    await k.query('rollback').catch(()=>{});
+    throw e;
+  } finally { k.release(); }
+}
+
 /** Profil zalogowanego. Konto wyłączone → sesja natychmiast unieważniona. */
 async function profil(sesja){
   if (!sesja) return null;
@@ -162,17 +184,17 @@ const API = {
     return [200, await zapytaj(s.uid, `
       select k.*, p.imie as instruktor,
         (select count(*) from public.przypisanie z where z.kurs_id=k.id and z.aktywne) as kursantow
-      from public.kurs k left join public.profile p on p.id = k.instruktor_id
+      from public.widok_kurs k left join public.profile p on p.id = k.instruktor_id
       order by k.dni`)];
   },
 
   async 'GET /api/kurs'(c, s){
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
     const [lekcje, etapy, materialy, postepy] = await Promise.all([
-      zapytaj(s.uid, `select * from public.lekcja where kurs_id=$1 order by kolejnosc`, [c.id]),
-      zapytaj(s.uid, `select e.* from public.etap e join public.lekcja l on l.id=e.lekcja_id
+      zapytaj(s.uid, `select * from public.widok_lekcja where kurs_id=$1 order by kolejnosc`, [c.id]),
+      zapytaj(s.uid, `select e.* from public.widok_etap e join public.lekcja l on l.id=e.lekcja_id
                       where l.kurs_id=$1 order by e.kolejnosc`, [c.id]),
-      zapytaj(s.uid, `select * from public.material where kurs_id=$1 order by nazwa_pl`, [c.id]),
+      zapytaj(s.uid, `select * from public.widok_material where kurs_id=$1 order by nazwa`, [c.id]),
       zapytaj(s.uid, `select p.* from public.postep p join public.etap e on e.id=p.etap_id
                       join public.lekcja l on l.id=e.lekcja_id where l.kurs_id=$1`, [c.id]),
     ]);
@@ -193,10 +215,10 @@ const API = {
   async 'GET /api/pytania'(_c, s){
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
     return [200, await zapytaj(s.uid, `
-      select p.*, pr.imie as kursant, k.nazwa_pl as kurs, od.imie as odpowiedzial
+      select p.*, pr.imie as kursant, k.nazwa as kurs, od.imie as odpowiedzial
       from public.pytanie p
       join public.profile pr on pr.id = p.kursant_id
-      join public.kurs k on k.id = p.kurs_id
+      join public.widok_kurs k on k.id = p.kurs_id
       left join public.profile od on od.id = p.odpowiedzial_id
       order by (p.status = 'nowe') desc, p.utworzone desc`)];
   },
@@ -237,12 +259,12 @@ const API = {
     if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
     // RLS zwróci wiersz tylko wtedy, gdy ten użytkownik ma prawo go widzieć
     const [m] = await zapytaj(s.uid,
-      `select sciezka, nazwa_pl, typ from public.material where id = $1`, [c.id]);
+      `select sciezka, nazwa, typ from public.widok_material where id = $1`, [c.id]);
     if (!m) return [403, { blad: 'Nie masz dostępu do tego materiału.' }];
     if (!bezpiecznaSciezka(m.sciezka)) return [400, { blad: 'Nieprawidłowa ścieżka pliku.' }];
     if (!fs.existsSync(naDysku(m.sciezka)))
       return [404, { blad: 'Plik nie został jeszcze wgrany.' }];
-    return [200, { link: podpisanyLink(m.sciezka), nazwa: m.nazwa_pl, wazny_s: 300 }];
+    return [200, { link: podpisanyLink(m.sciezka), nazwa: m.nazwa, wazny_s: 300 }];
   },
 
   async 'POST /api/material/publikuj'(c, s){
@@ -466,13 +488,18 @@ async function wgrajPlik(req, res, u, sesja){
   // 2. metadane — przez RLS, w kontekście zalogowanego
   let rekord;
   try {
-    const r = await zapytaj(sesja.uid, `
-      insert into public.material (kurs_id, etap_id, typ, nazwa_pl, opis, sciezka,
-                                   rozmiar_b, mime, opublikowany, dodal_id)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,false,public.uid()) returning *`,
-      [kurs_id, u.searchParams.get('etap_id') || null, typ, nazwa,
-       u.searchParams.get('opis') || null, sciezka, bajtow, mime]);
-    rekord = r[0];
+    rekord = await wTransakcji(sesja.uid, async q => {
+      const [m] = await q(`
+        insert into public.material (kurs_id, etap_id, typ, sciezka,
+                                     rozmiar_b, mime, opublikowany, dodal_id)
+        values ($1,$2,$3,$4,$5,$6,false,public.uid()) returning *`,
+        [kurs_id, u.searchParams.get('etap_id') || null, typ, sciezka, bajtow, mime]);
+      if (!m) return null;
+      await q(`insert into public.material_tekst (material_id, jezyk, nazwa, opis)
+               values ($1, public.moj_jezyk(), $2, $3)`,
+        [m.id, nazwa, u.searchParams.get('opis') || null]);
+      return { ...m, nazwa };
+    });
   } catch (e) {
     await fsp.rm(tymczasowy, { force: true });          // 3. sprzątanie
     return odpowiedz(res, 403, { blad: czytelnyBlad(e) });

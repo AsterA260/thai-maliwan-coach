@@ -141,23 +141,23 @@ function sprawdz(nr, opis, warunek, szczegol) {
      i wymóg uprawnień do kursu ze ścieżki.                        */
   const sc = k => `kurs/${k}/pdf/${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
   const e1 = await jako(KTO.maliwan,
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, dodal_id)
-     values ($1,'pdf','Poprawny',$2,$3) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, dodal_id)
+     values ($1,'pdf',$2,$3) returning id`,
     [KURS.mistrzowski, sc(KURS.mistrzowski), KTO.maliwan]);
   // ścieżka bez UUID kursu — dawniej przechodziła
   const e2 = await jako(KTO.maliwan,
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, dodal_id)
-     values ($1,'pdf','Bez UUID','kurs/x/pdf/test.pdf',$2) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, dodal_id)
+     values ($1,'pdf','kurs/x/pdf/test.pdf',$2) returning id`,
     [KURS.mistrzowski, KTO.maliwan]);
   // ścieżka wskazująca INNY kurs — próba podczepienia się pod cudzy plik
   const e3 = await jako(KTO.maliwan,
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, dodal_id)
-     values ($1,'pdf','Podszywka',$2,$3) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, dodal_id)
+     values ($1,'pdf',$2,$3) returning id`,
     [KURS.mistrzowski, sc(KURS.podstawowy), KTO.maliwan]);
   // ucieczka ze ścieżki
   const e4 = await jako(KTO.maliwan,
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, dodal_id)
-     values ($1,'pdf','Ucieczka',$2,$3) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, dodal_id)
+     values ($1,'pdf',$2,$3) returning id`,
     [KURS.mistrzowski, `kurs/${KURS.mistrzowski}/../../etc/passwd`, KTO.maliwan]);
   sprawdz(6, 'Ścieżka pliku musi wskazywać dokładnie ten sam kurs co rekord materiału',
     e1.ok && !e2.ok && !e3.ok && !e4.ok,
@@ -167,8 +167,8 @@ function sprawdz(nr, opis, warunek, szczegol) {
   /* ── 7. Instruktor tylko do swojego kursu ───────────────────── */
   await db.query(`update public.kurs set instruktor_id=null where id=$1`, [KURS.profesjonalny]);
   const f1 = await jako(KTO.maliwan,
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, dodal_id)
-     values ($1,'pdf','Cudzy kurs',$2,$3) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, dodal_id)
+     values ($1,'pdf',$2,$3) returning id`,
     [KURS.profesjonalny, sc(KURS.profesjonalny), KTO.maliwan]);
   await db.query(`update public.kurs set instruktor_id=$2 where id=$1`,
     [KURS.profesjonalny, KTO.maliwan]);
@@ -178,8 +178,8 @@ function sprawdz(nr, opis, warunek, szczegol) {
   /* ── 8. Publikacja odsłania materiał ────────────────────────── */
   const sciezkaNowa = sc(KURS.podstawowy);
   const { rows:[nowy] } = await db.query(
-    `insert into public.material (kurs_id, typ, nazwa_pl, sciezka, opublikowany, dodal_id)
-     values ($1,'pdf','Nowy materiał',$2,false,$3) returning id`,
+    `insert into public.material (kurs_id, typ, sciezka, opublikowany, dodal_id)
+     values ($1,'pdf',$2,false,$3) returning id`,
     [KURS.podstawowy, sciezkaNowa, KTO.maliwan]);
   const g1 = await jako(KTO.ania, `select count(*)::int n from public.material where id=$1`, [nowy.id]);
   await db.query(`update public.material set opublikowany=true where id=$1`, [nowy.id]);
@@ -437,6 +437,159 @@ function sprawdz(nr, opis, warunek, szczegol) {
     w21 ? `podała Norberta i rok 2000, baza zapisała: ${w21.odpowiedzial_id === KTO.maliwan
       ? 'Maliwan' : w21.odpowiedzial_id}, ${new Date(w21.odpowiedziano).getFullYear()}`
         : 'brak pytania do sprawdzenia');
+
+  /* ── 23. Wersja: dozwolone tylko przejścia z maszyny stanów ───── */
+  {
+    const etap = (await db.query(
+      `select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
+        where l.kurs_id=$1 limit 1`, [KURS.podstawowy])).rows[0];
+
+    await db.query(`delete from public.etap_wersja where komentarz = 'test 23'`);
+    const { rows:[w] } = await db.query(
+      `insert into public.etap_wersja (etap_id, numer, status, autor_id, komentarz)
+       values ($1, 900, 'draft', $2, 'test 23') returning id`, [etap.id, KTO.maliwan]);
+
+    const przejscie = async docelowy => {
+      try {
+        await db.query('begin');
+        const rozstrzygniety = ['zatwierdzone','zastapione'].includes(docelowy);
+        await db.query(
+          `update public.etap_wersja
+              set status = $2::public.status_wersji,
+                  zatwierdzil_id = $3::uuid,
+                  zatwierdzone_o = case when $3::uuid is null then null else now() end
+            where id = $1`,
+          [w.id, docelowy, rozstrzygniety ? KTO.norbert : null]);
+        await db.query('rollback');
+        return 'przeszło';
+      } catch (e) { await db.query('rollback'); return 'odrzucone'; }
+    };
+
+    const doZmiany  = await przejscie('do_zmiany');     // draft → do_zmiany : wolno
+    const zastapione= await przejscie('zastapione');    // draft → zastapione : nie wolno
+    await db.query(`delete from public.etap_wersja where id=$1`, [w.id]);
+
+    sprawdz(23, 'Wersja przechodzi tylko po dozwolonych ścieżkach maszyny stanów',
+      doZmiany === 'przeszło' && zastapione === 'odrzucone',
+      `draft→do_zmiany: ${doZmiany} · draft→zastapione: ${zastapione}`);
+  }
+
+  /* ── 24. Tylko JEDNA zatwierdzona wersja na etap ──────────────── */
+  {
+    const etap = (await db.query(
+      `select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
+        where l.kurs_id=$1 limit 1`, [KURS.podstawowy])).rows[0];
+    let druga;
+    try {
+      await db.query('begin');
+      await db.query(
+        `insert into public.etap_wersja (etap_id, numer, status, autor_id,
+                                         zatwierdzil_id, zatwierdzone_o, komentarz)
+         values ($1, 901, 'zatwierdzone', $2, $3, now(), 'test 24')`,
+        [etap.id, KTO.maliwan, KTO.norbert]);
+      await db.query('rollback');
+      druga = 'PRZESZŁA — ŹLE';
+    } catch (e) { await db.query('rollback'); druga = 'odrzucona'; }
+
+    const ile = (await db.query(
+      `select count(*)::int n from public.etap_wersja
+        where etap_id=$1 and status='zatwierdzone'`, [etap.id])).rows[0].n;
+
+    sprawdz(24, 'Etap ma dokładnie jedną zatwierdzoną wersję — drugiej baza nie przyjmie',
+      druga === 'odrzucona' && ile === 1,
+      `druga zatwierdzona: ${druga} · zatwierdzonych w bazie: ${ile}`);
+  }
+
+  /* ── 25. Kursant nie widzi wersji niezatwierdzonych ───────────── */
+  {
+    const etap = (await db.query(
+      `select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
+        where l.kurs_id=$1 limit 1`, [KURS.podstawowy])).rows[0];
+
+    await db.query(`delete from public.etap_wersja where komentarz = 'test 25'`);
+    await db.query(
+      `insert into public.etap_wersja (etap_id, numer, status, autor_id, komentarz)
+       values ($1, 902, 'draft', $2, 'test 25')`, [etap.id, KTO.maliwan]);
+
+    const kursant    = await jako(KTO.ania,    `select count(*)::int n from public.etap_wersja where etap_id=$1`, [etap.id]);
+    const instruktor = await jako(KTO.maliwan, `select count(*)::int n from public.etap_wersja where etap_id=$1`, [etap.id]);
+    const drafty     = await jako(KTO.ania,    `select count(*)::int n from public.etap_wersja where etap_id=$1 and status='draft'`, [etap.id]);
+
+    await db.query(`delete from public.etap_wersja where komentarz = 'test 25'`);
+
+    sprawdz(25, 'Kursant widzi wyłącznie wersje zatwierdzone — draftów Maliwan nie zobaczy',
+      n(kursant) === 1 && n(instruktor) === 2 && n(drafty) === 0,
+      `kursant widzi: ${n(kursant)} (z ${n(instruktor)}, które widzi instruktorka) · draftów u kursanta: ${n(drafty)}`);
+  }
+
+  /* ── 26. Technika w dwóch etapach — jedna, bez kopiowania ─────── */
+  {
+    await db.query(`delete from public.technika where kod = 'test-26'`);
+    const { rows:[tech] } = await db.query(
+      `insert into public.technika (kod) values ('test-26') returning id`);
+    const etapy = (await db.query(
+      `select e.id from public.etap e join public.lekcja l on l.id=e.lekcja_id
+        where l.kurs_id=$1 order by e.kolejnosc limit 2`, [KURS.podstawowy])).rows;
+
+    for (const e of etapy)
+      await db.query(`insert into public.etap_technika (etap_id, technika_id) values ($1,$2)`,
+        [e.id, tech.id]);
+
+    const ileTechnik = (await db.query(
+      `select count(*)::int n from public.technika where kod='test-26'`)).rows[0].n;
+    const ilePowiazan = (await db.query(
+      `select count(*)::int n from public.etap_technika where technika_id=$1`, [tech.id])).rows[0].n;
+
+    // skasowanie etapu NIE MOŻE zabrać techniki używanej gdzie indziej
+    let kasowanie;
+    try {
+      await db.query('begin');
+      await db.query(`delete from public.etap where id=$1`, [etapy[0].id]);
+      const zostala = (await db.query(
+        `select count(*)::int n from public.technika where id=$1`, [tech.id])).rows[0].n;
+      await db.query('rollback');
+      kasowanie = zostala === 1 ? 'technika przetrwała' : 'TECHNIKA ZNIKNĘŁA — ŹLE';
+    } catch (e) { await db.query('rollback'); kasowanie = 'technika przetrwała'; }
+
+    await db.query(`delete from public.etap_technika where technika_id=$1`, [tech.id]);
+    await db.query(`delete from public.technika where id=$1`, [tech.id]);
+
+    sprawdz(26, 'Jedna technika w wielu etapach — bez kopiowania i bez utraty przy kasowaniu etapu',
+      ileTechnik === 1 && ilePowiazan === 2 && kasowanie === 'technika przetrwała',
+      `technik w bazie: ${ileTechnik} · powiązań z etapami: ${ilePowiazan} · po usunięciu etapu: ${kasowanie}`);
+  }
+
+  /* ── 27. Głosówka: klucz S3 musi wskazywać swoją encję ────────── */
+  {
+    await db.query(`delete from public.technika where kod in ('test-27a','test-27b')`);
+    const { rows:[ta] } = await db.query(`insert into public.technika (kod) values ('test-27a') returning id`);
+    const { rows:[tb] } = await db.query(`insert into public.technika (kod) values ('test-27b') returning id`);
+
+    const wstaw = async (technika, klucz, etap = null) => {
+      try {
+        await db.query('begin');
+        await db.query(
+          `insert into public.glosowka (technika_id, etap_id, jezyk_zrodlowy, klucz_s3, nagral_id)
+           values ($1,$2,'th',$3,$4)`, [technika, etap, klucz, KTO.maliwan]);
+        await db.query('rollback');
+        return 'przyjęte';
+      } catch (e) { await db.query('rollback'); return 'odrzucone'; }
+    };
+
+    const dobry  = await wstaw(ta.id, `glosowka/technika/${ta.id}/${Date.now()}.m4a`);
+    const cudzy  = await wstaw(ta.id, `glosowka/technika/${tb.id}/${Date.now()}.m4a`);
+    const bezSensu = await wstaw(ta.id, 'glosowka/technika/x/plik.m4a');
+    const oba   = await wstaw(ta.id, `glosowka/technika/${ta.id}/${Date.now()}.m4a`,
+                              (await db.query(`select id from public.etap limit 1`)).rows[0].id);
+
+    await db.query(`delete from public.technika where kod in ('test-27a','test-27b')`);
+
+    sprawdz(27, 'Głosówka: klucz S3 musi wskazywać jej encję, i tylko jedną — technikę albo etap',
+      dobry === 'przyjęte' && cudzy === 'odrzucone' &&
+      bezSensu === 'odrzucone' && oba === 'odrzucone',
+      `własny klucz: ${dobry} · klucz cudzej techniki: ${cudzy} · klucz bez UUID: ${bezSensu} · ` +
+      `technika i etap naraz: ${oba}`);
+  }
 
   /* ── 22. Tożsamość nie wycieka między równoległymi transakcjami ──
      To jest test warunku bezpieczeństwa Etapu 0. Sprawdza trzy rzeczy:

@@ -62,17 +62,17 @@ const licz = async (sql, p=[]) => Number((await db.query(sql, p)).rows[0].n);
 
   const { rows:[kurs] } = await db.query(`select id from public.kurs where kod='podstawowy'`);
   const sciezkaRecznie = `kurs/${kurs.id}/pdf/dodany-recznie-w-aplikacji.pdf`;
-  await db.query(`insert into public.material (kurs_id, typ, nazwa_pl, sciezka, opublikowany)
-    values ($1,'pdf','Dodany ręcznie w aplikacji',$2,true)
+  await db.query(`insert into public.material (kurs_id, typ, sciezka, opublikowany)
+    values ($1,'pdf',$2,true)
     on conflict (sciezka) do nothing`, [kurs.id, sciezkaRecznie]);
 
   const { rows:[lekcjaRecznie] } = await db.query(
-    `insert into public.lekcja (kurs_id, dzien, tytul_pl, kolejnosc, opublikowana)
-     values ($1, 99, 'Dzień dodany ręcznie', 99, true)
-     on conflict (kurs_id, dzien) do update set tytul_pl=excluded.tytul_pl returning id`,
+    `insert into public.lekcja (kurs_id, dzien, kolejnosc, opublikowana)
+     values ($1, 99, 99, true)
+     on conflict (kurs_id, dzien) do update set kolejnosc=excluded.kolejnosc returning id`,
     [kurs.id]);
-  await db.query(`insert into public.etap (lekcja_id, kod, nazwa_pl, kolejnosc, opublikowany)
-    values ($1,'RECZNY-01','Etap dodany ręcznie',1,true)
+  await db.query(`insert into public.etap (lekcja_id, kod, kolejnosc, opublikowany)
+    values ($1,'RECZNY-01',1,true)
     on conflict (lekcja_id, kod) do nothing`, [lekcjaRecznie.id]);
 
   const postepy0 = await licz(`select count(*)::int n from public.postep where kursant_id=$1`, [ANIA]);
@@ -109,14 +109,25 @@ const licz = async (sql, p=[]) => Number((await db.query(sql, p)).rows[0].n);
 
   /* ── zmiana w arkuszu ma się przenieść ──────────────────────── */
   const { rows:[przed] } = await db.query(
-    `select id, nazwa_pl from public.etap where kod='D1-01'`);
-  await db.query(`update public.etap set nazwa_pl='STARA NAZWA DO NADPISANIA' where kod='D1-01'`);
+    `select e.id, t.nazwa from public.etap e
+     join public.etap_wersja w on w.etap_id=e.id and w.status='zatwierdzone'
+     join public.etap_tekst t on t.etap_wersja_id=w.id and t.jezyk='pl'
+    where e.kod='D1-01'`);
+  await db.query(`begin`);
+  await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+  await db.query(`update public.etap_tekst set nazwa='STARA NAZWA DO NADPISANIA'
+     where etap_wersja_id in (select w.id from public.etap_wersja w
+        join public.etap e on e.id=w.etap_id where e.kod='D1-01') and jezyk='pl'`);
+  await db.query(`commit`);
   zaimportuj();
   const { rows:[po] } = await db.query(
-    `select id, nazwa_pl from public.etap where kod='D1-01'`);
+    `select e.id, t.nazwa from public.etap e
+     join public.etap_wersja w on w.etap_id=e.id and w.status='zatwierdzone'
+     join public.etap_tekst t on t.etap_wersja_id=w.id and t.jezyk='pl'
+    where e.kod='D1-01'`);
   sprawdz(4, 'Poprawka w arkuszu nadpisuje etap, ale nie tworzy nowego',
-    po.nazwa_pl === przed.nazwa_pl && po.id === przed.id,
-    `„${przed.nazwa_pl}" → podmienione → po imporcie znów „${po.nazwa_pl}", ten sam identyfikator`);
+    po.nazwa === przed.nazwa && po.id === przed.id,
+    `„${przed.nazwa}" → podmienione → po imporcie znów „${po.nazwa}", ten sam identyfikator`);
 
   /* ── każdy materiał ma ścieżkę zgodną z kursem ─────────────── */
   const zle = await licz(`select count(*)::int n from public.material

@@ -59,7 +59,7 @@ function atrapaDokumentu() {
 /* ══ ATRAPA KLIENTA SUPABASE ═══════════════════════════════════════
    Odpowiada prawdziwymi wierszami z lokalnej bazy — sprawdzamy
    kształt danych, który adapter z nich buduje.                    */
-/** Z listy kolumn PostgREST („id, imie, kurs:kurs_id (nazwa_pl)")
+/** Z listy kolumn PostgREST („id, imie, kurs:kurs_id (nazwa)")
     zostawiamy tylko zwykłe nazwy — atrapa ma zwracać dokładnie te
     kolumny, o które prosi adapter, a nie cały wiersz. Inaczej test
     porównywałby kształty, których produkcja nigdy nie zobaczy. */
@@ -199,8 +199,14 @@ function atrapaSupabase(tabele, kontekst) {
              'Pytanie kontrolne do kontraktow')`);
 
   const TABELE = {};
+  // Atrapa Supabase czyta te same tabele i widoki, z których korzysta
+  // warstwa produkcyjna. Po przejściu na tłumaczenia tabelaryczne
+  // doszły widoki odczytowe — bez nich atrapa nie miałaby czego oddać.
   for (const t of ['profile', 'kurs', 'lekcja', 'etap', 'material', 'postep',
-                   'przypisanie', 'pytanie', 'widok_kursanci'])
+                   'przypisanie', 'pytanie', 'widok_kursanci',
+                   'widok_kurs', 'widok_lekcja', 'widok_etap', 'widok_material',
+                   'kurs_tekst', 'lekcja_tekst', 'material_tekst',
+                   'etap_wersja', 'etap_tekst', 'jezyk'])
     TABELE[t] = (await db.query(`select * from public.${t}`)).rows;
 
   const maliwan = TABELE.profile.find(p => p.email === 'maliwan@thaimaliwan.pl');
@@ -286,8 +292,8 @@ function atrapaSupabase(tabele, kontekst) {
   const materialS = await S.wgrajMaterial({ kurs_id: kursMaliwan.id, typ: 'pdf',
                                             nazwa: 'Kontrakt testowy', plik });
   sprawdz(11, 'wgrajMaterial() przyjmuje w obu warstwach prawdziwy plik i zwraca rekord materiału',
-    materialL && materialS && maPola(materialL, ['id','nazwa_pl','sciezka','rozmiar_b']) &&
-    maPola(materialS, ['nazwa_pl','sciezka','rozmiar_b']),
+    materialL && materialS && maPola(materialL, ['id','nazwa','sciezka','rozmiar_b']) &&
+    maPola(materialS, ['nazwa','sciezka','rozmiar_b']),
     bladWgrywania ? `lokalnie: ${bladWgrywania}` :
       `lokalnie: ${materialL.sciezka}\n          Supabase (atrapa): ${materialS.sciezka}`);
 
