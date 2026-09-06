@@ -269,6 +269,52 @@ do $$ begin
 exception when others then null; end $$;
 
 -- ═══════════════════════════════════════════════════════════════════
+--  ROLA INICJALIZACYJNA `astera_seed`                      [Etap 1a]
+-- ═══════════════════════════════════════════════════════════════════
+--  Zakładanie danych startowych i pierwszego administratora to
+--  czynności, których normalny ruch wykonywać NIE MOŻE. Wcześniej
+--  odróżniała je lista wykluczeń ról plus brak tożsamości. Jedno
+--  i drugie było słabe: lista chroni tylko przed tym, co ktoś zdążył
+--  na nią wpisać, a „brak tożsamości" ma znaczyć „nikt", nie
+--  „wolno mi więcej".
+--
+--  Teraz inicjalizacja to osobna, jawnie włączana rola.
+--
+--    NOLOGIN       nikt się nią nie połączy. Wejście wyłącznie przez
+--                  SET LOCAL ROLE, i tylko dla właściciela bazy.
+--    BYPASSRLS     seed wstawia dane, zanim istnieje ktokolwiek, kto
+--                  mógłby je zobaczyć — polityki oparte na
+--                  `public.uid()` odcięłyby go od wszystkiego.
+--                  To jest dokładnie ta moc, dla której ta rola musi
+--                  być odcięta od ruchu aplikacyjnego.
+--    NOCREATEROLE  nie nada uprawnień ani sobie, ani nikomu.
+--
+--  Na Aurorze: nadaje się WYŁĄCZNIE roli migracyjnej, nigdy tej,
+--  którą łączy się AsterA Core.
+do $$ begin
+  create role astera_seed nologin nosuperuser nocreatedb nocreaterole
+                          noinherit bypassrls;
+exception when duplicate_object then
+  alter role astera_seed nologin nosuperuser nocreatedb nocreaterole bypassrls;
+end $$;
+
+-- Właściciel bazy może w nią wejść — i to jedyna droga.
+do $$ begin
+  execute format('grant astera_seed to %I', current_user);
+exception when others then null; end $$;
+
+-- ── ZAKAZ, KTÓRY MUSI BYĆ ZAPISANY, A NIE ZAKŁADANY ───────────────
+--  Gdyby ktoś kiedyś nadał `astera_seed` roli aplikacyjnej, cała ta
+--  konstrukcja przestałaby cokolwiek znaczyć w tej samej sekundzie.
+--  Odbieramy jawnie i pilnujemy testem bazy 28.
+do $$ begin
+  execute 'revoke astera_seed from astera_api';
+exception when others then null; end $$;
+do $$ begin
+  execute 'revoke astera_seed from authenticated, anon';
+exception when others then null; end $$;
+
+-- ═══════════════════════════════════════════════════════════════════
 --  UPRAWNIENIA TABELOWE I FUNKCYJNE
 --  Domyślnie nic. Nadajemy tylko to, co naprawdę potrzebne.
 -- ═══════════════════════════════════════════════════════════════════
@@ -319,3 +365,46 @@ revoke all on function public.ustanow_pierwszego_admina(text)
   from public, anon, authenticated, astera_api, service_role;
 revoke all on function public.kontekst_inicjalizacji()
   from public, anon, authenticated, astera_api, service_role;
+
+-- ═══════════════════════════════════════════════════════════════════
+--  UPRAWNIENIA ROLI INICJALIZACYJNEJ
+--
+--  BYPASSRLS omija polityki, ale NIE omija uprawnień tabelowych —
+--  bez tych nadań seed kończy się na „permission denied". Nadanie
+--  „na przyszłość" (default privileges) jest konieczne, bo tabele
+--  z migracji powstają PO tym pliku.
+-- ═══════════════════════════════════════════════════════════════════
+--  Prawo wykonania funkcji nie jest tu hojnością. Ograniczenia CHECK
+--  i wyzwalacze wołają `kurs_ze_sciezki()`, `glosowka_z_klucza()`,
+--  `kontekst_inicjalizacji()` prawami TEGO, KTO PISZE — więc seed bez
+--  tych praw kończy się „permission denied for function ...", a nie
+--  odmową merytoryczną. Rola i tak jest NOLOGIN i wchodzi w nią
+--  wyłącznie właściciel bazy, który wszystkie te funkcje ma.
+grant usage on schema public to astera_seed;
+grant all privileges on all tables    in schema public to astera_seed;
+grant all privileges on all sequences in schema public to astera_seed;
+grant execute on all functions in schema public to astera_seed;
+grant execute on all routines  in schema public to astera_seed;
+
+--  Tabele i funkcje z migracji powstają PO tym pliku — bez nadania
+--  „na przyszłość" każda nowa migracja cicho rozbrajałaby seed.
+do $$ begin
+  execute format(
+    'alter default privileges for role %I in schema public
+       grant all on tables to astera_seed', current_user);
+  execute format(
+    'alter default privileges for role %I in schema public
+       grant all on sequences to astera_seed', current_user);
+  execute format(
+    'alter default privileges for role %I in schema public
+       grant execute on functions to astera_seed', current_user);
+end $$;
+
+-- Atrapa Auth istnieje wyłącznie lokalnie (db/00_supabase_lokalnie.sql).
+-- Na Aurorze tego schematu nie ma i nie będzie — stąd warunek.
+do $$ begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'auth') then
+    execute 'grant usage on schema auth to astera_seed';
+    execute 'grant all privileges on all tables in schema auth to astera_seed';
+  end if;
+end $$;

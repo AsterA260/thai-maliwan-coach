@@ -379,24 +379,47 @@ $$;
 --  Rolę wywołującego widać w GUC `role` (ustawianym przez SET ROLE)
 --  i w roli z tokenu — sprawdzamy OBIE, bo obie są odporne na
 --  `security definer`. Brak tokenu = SQL Editor, czyli migracja.
---  ETAP 0 MIGRACJI — dawniej trzeci warunek czytał rolę z tokenu JWT
---  Supabase (`request.jwt.claims`). Po przejściu na własną tożsamość
---  tokenu w bazie już nie ma, więc jego miejsce zajmuje warunek
---  mocniejszy i prostszy: `public.uid() is null`.
+--  ETAP 1a — DOMKNIĘCIE. Poprzednia wersja opierała się na dwóch
+--  rzeczach, które trzeba było usunąć:
 --
---  Czyta się to tak: kontekstem inicjalizacji jest wyłącznie migracja
---  uruchamiana bez zalogowanego użytkownika. Ktokolwiek działa przez
---  AsterA Core ma ustawioną tożsamość — i tym samym jest tu odcięty,
---  niezależnie od tego, jaką flagę sobie ustawi. To zamyka dziurę,
---  którą wychwycił test 20, bez opierania się na czymkolwiek, co
---  wywołujący mógłby podrobić.
+--   1. LISTA WYKLUCZEŃ. Warunek brzmiał „rola NIE JEST jedną z:
+--      astera_api, authenticated, anon". Lista wykluczeń chroni
+--      wyłącznie przed tym, co ktoś zdążył na nią wpisać. Każda nowa
+--      rola bazodanowa — dodana za pół roku przy Aurorze, przy
+--      raportach, przy czymkolwiek — z miejsca przechodziła.
+--
+--   2. `public.uid() is null` JAKO CZĘŚĆ DEFINICJI. Brak tożsamości
+--      ma znaczyć „nikt, czyli zero uprawnień" — i nic ponadto.
+--      Wpisanie go do definicji inicjalizacji zrównywało dwa różne
+--      pojęcia. Technicznie zawężało, nie rozszerzało, ale zasada
+--      była zła, a na złej zasadzie prędzej czy później ktoś się
+--      oprze przy kolejnej zmianie.
+--
+--  Teraz są dwa warunki i oba trzeba włączyć ŚWIADOMIE:
+--
+--    • flaga `astera.inicjalizacja` ustawiona TRANSAKCYJNIE, oraz
+--    • jawne wejście w rolę `astera_seed` przez SET LOCAL ROLE.
+--
+--  Rola `astera_seed` jest NOLOGIN — nikt się nią nie połączy — i nie
+--  jest nadana ani `astera_api`, ani `authenticated`, ani `anon`.
+--  Wejść w nią może wyłącznie właściciel bazy. Sama flaga nie daje
+--  nic: ustawić ją może każdy, i o to chodzi — jest przełącznikiem
+--  intencji, a nie zabezpieczeniem. Zabezpieczeniem jest rola.
+--
+--  Rolę wywołującego czytamy z GUC `role`, a NIE z `current_user`.
+--  To nie jest drobiazg: wewnątrz funkcji `security definer`
+--  `current_user` to właściciel funkcji, więc oparcie się na nim
+--  przepuszczało kursanta, który sam ustawił sobie flagę. Wychwycił
+--  to swego czasu test 20. GUC `role` odzwierciedla wyłącznie jawne
+--  SET ROLE i jest na `security definer` odporny.
 create or replace function public.kontekst_inicjalizacji()
 returns boolean language sql stable set search_path = public as $$
   select coalesce(current_setting('astera.inicjalizacja', true), '') = 'tak'
-     and coalesce(current_setting('role', true), 'brak')
-           not in ('astera_api', 'authenticated', 'anon')
-     and public.uid() is null
+     and coalesce(current_setting('role', true), 'none') = 'astera_seed'
 $$;
+
+comment on function public.kontekst_inicjalizacji() is
+  'Prawda wylacznie dla kontrolowanego seedu: flaga transakcyjna ORAZ jawne SET LOCAL ROLE astera_seed. Brak tozsamosci NIE jest kontekstem inicjalizacji.';
 
 -- ── Profil: nikt sam sobie nie zmieni e-maila, roli ani aktywności ─
 create or replace function public.chron_profil()
@@ -463,9 +486,31 @@ create trigger profil_ostatni_admin before delete on public.profile
 --     równoczesne wywołania nie zrobią dwóch „pierwszych" adminów;
 --   • flagę inicjalizacji ustawia i gasi sama, w jednej transakcji.
 -- ═══════════════════════════════════════════════════════════════════
+--  ETAP 1a — DWIE ZMIANY, OBIE WYMUSZONE PRZEZ NOWĄ ZASADĘ.
+--
+--  1. Funkcja NIE jest już `security definer`. Próba wejścia w rolę
+--     inicjalizacyjną z jej wnętrza kończy się twardym błędem
+--     PostgreSQL: „cannot set parameter role within security-definer
+--     function". Nie da się tego obejść i dobrze — to znaczy, że
+--     w rolę uprzywilejowaną musi wejść CZŁOWIEK, świadomie, a nie
+--     funkcja po cichu za niego.
+--
+--  2. Wywołanie wymaga więc jednej linijki więcej:
+--
+--         begin;
+--           set local role astera_seed;
+--           select public.ustanow_pierwszego_admina('norbert@thaimaliwan.pl');
+--         commit;
+--
+--     Flagę funkcja ustawia sobie sama. Rola i flaga pochodzą z dwóch
+--     różnych miejsc i obie są konieczne — o to w tym chodziło.
+--
+--  Utrata praw właściciela niczego nie osłabia: prawa wykonania i tak
+--  nie ma ani `anon`, ani `authenticated`, ani `astera_api`, a kto
+--  wchodzi w `astera_seed`, ten jest właścicielem bazy.
 create or replace function public.ustanow_pierwszego_admina(p_email text)
 returns public.profile
-language plpgsql security definer set search_path = public as $$
+language plpgsql set search_path = public as $$
 declare w public.profile;
 begin
   perform public.zablokuj_licznik_adminow();
@@ -475,11 +520,18 @@ begin
       using errcode = '42501';
   end if;
 
+  if coalesce(current_setting('role', true), 'none') <> 'astera_seed' then
+    raise exception 'Wejdz najpierw w role inicjalizacyjna: SET LOCAL ROLE astera_seed;'
+      using errcode = '42501';
+  end if;
+
   perform set_config('astera.inicjalizacja', 'tak', true);
+
   update public.profile
      set rola = 'admin', aktywne = true
    where lower(email) = lower(trim(p_email))
    returning * into w;
+
   perform set_config('astera.inicjalizacja', 'nie', true);
 
   if w.id is null then

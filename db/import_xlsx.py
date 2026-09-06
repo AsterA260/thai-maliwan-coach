@@ -56,8 +56,11 @@ w('-- Źródło: ' + PLIK)
 w('begin;')
 # Import wypełnia wersje zatwierdzone (to treść przekazana przez Maliwan
 # w arkuszu), a wyzwalacz chron_tekst_zatwierdzony broni takich wersji
-# przed edycją. Ta sama wąska furtka co przy nadawaniu pierwszych ról:
-# działa tylko w transakcji i tylko gdy nikt nie jest zalogowany.
+# przed edycją. Ta sama wąska furtka co przy nadawaniu pierwszych ról,
+# a od Etapu 1a wymaga dwóch świadomych kroków: jawnego wejścia w rolę
+# `astera_seed` (NOLOGIN, nieosiągalna dla astera_api) oraz flagi
+# transakcyjnej. Żaden z nich osobno nie wystarcza.
+w('set local role astera_seed;')
 w("select set_config('astera.inicjalizacja', 'tak', true);")
 w('')
 w('')

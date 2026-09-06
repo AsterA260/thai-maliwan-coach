@@ -1,6 +1,7 @@
 -- WYGENEROWANE PRZEZ db/import_xlsx.py — nie edytuj ręcznie
 -- Źródło: AsterA_Coach_Baza_Tresci.xlsx
 begin;
+set local role astera_seed;
 select set_config('astera.inicjalizacja', 'tak', true);
 
 

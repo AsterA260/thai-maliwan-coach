@@ -162,18 +162,27 @@ sprawdzona droga:
 **Krok 1.** Authentication → Users → **Invite user** → `norbert@thaimaliwan.pl`.
 Wyzwalacz założy profil z rolą `kursant`.
 
-**Krok 2.** SQL Editor:
+**Krok 2.** SQL Editor — **jako właściciel bazy**, w transakcji:
 
 ```sql
-select public.ustanow_pierwszego_admina('norbert@thaimaliwan.pl');
+begin;
+  set local role astera_seed;
+  select public.ustanow_pierwszego_admina('norbert@thaimaliwan.pl');
+commit;
 ```
+
+Linijka `set local role astera_seed` **nie jest ozdobnikiem** — bez niej
+funkcja odmawia. Od Etapu 1a tryb inicjalizacyjny wymaga jawnego wejścia
+w rolę `astera_seed`; sam brak zalogowanego użytkownika nie daje już
+żadnych dodatkowych praw (§4.2, test bazy 28).
 
 Funkcja:
 
 - **odmawia**, gdy istnieje już choć jeden aktywny administrator — więc
   nie da się jej użyć drugi raz;
-- **nie jest dostępna** dla `anon` ani `authenticated`, czyli aplikacja
-  i przeglądarka nie mają do niej dostępu (test bazy 20);
+- **odmawia**, gdy wywołujący nie jest w roli `astera_seed`;
+- **nie jest dostępna** dla `anon`, `authenticated` ani `astera_api`,
+  czyli aplikacja i przeglądarka nie mają do niej dostępu (testy 20, 28);
 - bierze tę samą blokadę co ochrona ostatniego admina, więc dwa
   równoczesne wywołania nie zrobią dwóch „pierwszych" adminów.
 
@@ -216,6 +225,7 @@ czyli najwyższych uprawnień, jakie w ogóle są). Cała w jednej transakcji,
 
 ```sql
 begin;
+  set local role astera_seed;
   select set_config('astera.inicjalizacja', 'tak', true);
   update public.profile set rola = 'instruktor' where rola = 'admin' and aktywne;
   select set_config('astera.inicjalizacja', 'nie', true);
@@ -371,6 +381,76 @@ danych; żądania bez tożsamości widzą zero wierszy. Trzecia część testu
 celowo używa ustawienia sesyjnego i sprawdza, że tożsamość **zostaje** na
 połączeniu — bez tego nie wiedzielibyśmy, czy test w ogóle potrafi wykryć
 błąd.
+
+### 4.2 Kto może zakładać dane — rola `astera_seed`      [Etap 1a]
+
+Zakładanie danych startowych i pierwszego administratora omija ochronę,
+której podlega cały normalny ruch. Trzeba więc powiedzieć wprost, kto ma
+do tego prawo — i powiedzieć to tak, żeby nie dało się w to wejść
+przypadkiem.
+
+**Zasada brzmi: brak tożsamości = nikt = zero uprawnień.** Nic ponadto.
+
+Do Etapu 1a było inaczej. Kontekst inicjalizacji rozpoznawało się po
+dwóch rzeczach, z których obie były słabe:
+
+| co sprawdzano | dlaczego to było złe |
+|---|---|
+| rola **nie jest** jedną z `astera_api`, `authenticated`, `anon` | lista wykluczeń chroni tylko przed tym, co ktoś zdążył na nią wpisać — każda nowa rola przechodziła z marszu |
+| `public.uid() is null` | zrównywało „nikt tu nie jest zalogowany" z „wolno mi więcej"; technicznie zawężało, ale na złej zasadzie ktoś prędzej czy później by się oparł |
+
+Teraz kontekstem inicjalizacji jest **koniunkcja dwóch świadomych
+kroków**, pochodzących z dwóch różnych miejsc:
+
+```sql
+begin;
+  set local role astera_seed;                              -- 1. rola
+  select set_config('astera.inicjalizacja','tak',true);    -- 2. flaga
+  ...
+commit;
+```
+
+Rola `astera_seed` jest `NOLOGIN` — nikt się nią nie połączy. Wejść w nią
+może wyłącznie właściciel bazy przez `SET LOCAL ROLE`. Nie jest nadana
+ani `astera_api`, ani `authenticated`, ani `anon`, a `02_rls.sql` odbiera
+ją im jawnie, zamiast zakładać, że nikt jej nie nada.
+
+Sama flaga nie daje nic i **taki jest zamysł**: ustawić ją może każdy,
+bo jest deklaracją intencji, a nie zabezpieczeniem. Zabezpieczeniem jest
+rola.
+
+Rola ma `BYPASSRLS`, bo seed wstawia dane, zanim istnieje ktokolwiek,
+kto mógłby je zobaczyć. To jest dokładnie ta moc, dla której musi być
+odcięta od ruchu aplikacyjnego. **Na Aurorze nadaje się ją wyłącznie
+roli migracyjnej — nigdy tej, którą łączy się AsterA Core.**
+
+**Dwie pułapki, na które się nadziałem, warte zapamiętania:**
+
+1. `SET ROLE` **nie działa wewnątrz funkcji `security definer`** —
+   PostgreSQL odmawia: *„cannot set parameter role within
+   security-definer function"*. Dlatego `ustanow_pierwszego_admina()`
+   przestała być `security definer`, a w rolę wchodzi wywołujący. Wyszło
+   to na dobre: w tryb uprzywilejowany wchodzi teraz człowiek, świadomie,
+   a nie funkcja po cichu za niego.
+
+2. Ograniczenia `CHECK` i wyzwalacze z prawami wywołującego wołają
+   funkcje **prawami tego, kto pisze**. Rola `astera_seed` musi mieć
+   `EXECUTE` na funkcjach schematu `public`, inaczej seed kończy się
+   `permission denied for function ...`, a nie odmową merytoryczną.
+   Nadania obejmują też tabele i funkcje **przyszłe** (`alter default
+   privileges`), bo migracje tworzą je po `02_rls.sql`.
+
+**Czym to jest sprawdzone.** Test 28: bez roli sama flaga nie daje
+kontekstu i nie zmienia roli konta; `astera_api` nie jest członkiem
+`astera_seed` i nie wywoła ani `ustanow_pierwszego_admina()`, ani
+`kontekst_inicjalizacji()`; własna flaga nie odblokowuje mu zmiany roli
+ani ochrony ostatniego administratora; a prawidłowy, kontrolowany seed
+nadal działa. Test sprawdzony pod kątem mocy wykrywczej: **na starej
+definicji funkcji nie przechodzi.**
+
+Test 29 pilnuje skutku ubocznego, który przy tej zmianie wyszedł na jaw:
+instruktorka musi móc redagować **własny draft** przez Core, a treści
+wersji zatwierdzonej — nie.
 
 ---
 

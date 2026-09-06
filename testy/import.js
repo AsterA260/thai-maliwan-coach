@@ -114,6 +114,7 @@ const licz = async (sql, p=[]) => Number((await db.query(sql, p)).rows[0].n);
      join public.etap_tekst t on t.etap_wersja_id=w.id and t.jezyk='pl'
     where e.kod='D1-01'`);
   await db.query(`begin`);
+  await db.query(`set local role astera_seed`);   // Etap 1a: sama flaga już nie wystarcza
   await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
   await db.query(`update public.etap_tekst set nazwa='STARA NAZWA DO NADPISANIA'
      where etap_wersja_id in (select w.id from public.etap_wersja w

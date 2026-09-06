@@ -375,12 +375,18 @@ function sprawdz(nr, opis, warunek, szczegol) {
     .catch(e => e.message.split('\n')[0]);
 
   await db.query('begin');
+  // Od Etapu 1a przygotowanie stanu wymaga jawnej roli inicjalizacyjnej,
+  // nie samej flagi. Po przygotowaniu wracamy do roli domyślnej, żeby
+  // `ustanow_pierwszego_admina()` musiała poradzić sobie sama.
+  await db.query('set local role astera_seed');
   await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
   await db.query(`update public.profile set rola='instruktor'
                    where rola='admin' and aktywne`);          // stan sprzed pierwszego admina
   await db.query(`select set_config('astera.inicjalizacja','nie',true)`);
   const bezAdmina = (await db.query(
     `select count(*)::int n from public.profile where rola='admin' and aktywne`)).rows[0].n;
+  // Wywołanie zgodne z instrukcją: w roli inicjalizacyjnej, flagę
+  // funkcja ustawia sobie sama.
   await db.query(`select public.ustanow_pierwszego_admina('ania@przyklad.pl')`);
   const poUstanowieniu = (await db.query(
     `select rola from public.profile where email='ania@przyklad.pl'`)).rows[0].rola;
@@ -667,6 +673,180 @@ function sprawdz(nr, opis, warunek, szczegol) {
       `${bezTozsamosci.length} (${bOk ? 'zero wierszy' : 'WIDZĄ DANE — ŹLE'}) · ` +
       `kontrola: ustawienie sesyjne ${cOk ? 'zostaje na połączeniu (test ma moc wykrywczą)'
         : 'NIE ZOSTAJE — test niczego nie sprawdza'}`);
+  }
+
+  /* ── 28. Tryb inicjalizacji wymaga jawnej roli, nie braku tożsamości ──
+
+     Do Etapu 1a `kontekst_inicjalizacji()` opierał się na liście
+     wykluczonych ról i na warunku `public.uid() is null`. Zasada była
+     zła w obie strony: lista wykluczeń przepuszcza każdą rolę, której
+     nikt na nią nie wpisał, a brak tożsamości ma znaczyć „nikt", a nie
+     „tryb uprzywilejowany".
+
+     Teraz inicjalizacja to koniunkcja dwóch świadomych kroków — flagi
+     transakcyjnej i roli `astera_seed` — i ten test pilnuje trzech
+     rzeczy naraz.                                            [Etap 1a] */
+  {
+    // ── A. Brak tożsamości sam z siebie nie daje NIC ──────────────
+    //  Połączenie właściciela bazy, bez SET ROLE i bez public.uid().
+    //  Dokładnie ten stan, który dawniej BYŁ kontekstem inicjalizacji.
+    await db.query('begin');
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    const kontekstBezRoli = (await db.query(
+      `select public.kontekst_inicjalizacji() k`)).rows[0].k;
+    await db.query('rollback');
+
+    const idProby = await nowyUzytkownik('proba.seed@przyklad.pl', 'Próba Seed');
+    await db.query('begin');
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    await db.query(`update public.profile set rola='admin' where id=$1`, [idProby]);
+    await db.query('commit');
+    const poProbieBezRoli = await rolaKonta(idProby);
+
+    const aOk = kontekstBezRoli === false && poProbieBezRoli === 'kursant';
+
+    // ── B. `astera_api` nie wejdzie w tę ścieżkę żadnym sposobem ──
+    //  B1: rola aplikacyjna nie jest członkiem roli inicjalizacyjnej.
+    //
+    //  UWAGA NA POZORNY TEST. Pierwsza wersja próbowała po prostu
+    //  `set local role astera_api; set local role astera_seed;`
+    //  — i PRZESZŁA, co wyglądało na dziurę, a było wadą testu:
+    //  PostgreSQL sprawdza prawo do SET ROLE względem UŻYTKOWNIKA
+    //  SESJI, a testy łączą się jako właściciel bazy. Lokalnie takim
+    //  wywołaniem nie da się udowodnić niczego.
+    //
+    //  Tym, co naprawdę chroni produkcję — gdzie Core łączy się JAKO
+    //  `astera_api` — jest graf członkostwa ról. I to sprawdzamy.
+    const { rows: czlonkostwa } = await db.query(`
+      select r.rolname,
+             pg_has_role(r.rolname, 'astera_seed', 'member') jest
+        from pg_roles r
+       where r.rolname in ('astera_api','authenticated','anon')`);
+    const wejscieWRole = czlonkostwa.every(r => r.jest === false)
+      ? 'brak członkostwa (' + czlonkostwa.map(r => r.rolname).join(', ') + ')'
+      : 'MA CZŁONKOSTWO — ŹLE: ' +
+        czlonkostwa.filter(r => r.jest).map(r => r.rolname).join(', ');
+
+    //  B2: własnoręczna flaga nie daje mu kontekstu inicjalizacji
+    //      ani nie odblokowuje zmiany roli.
+    await db.query('begin');
+    await db.query('set local role astera_api');
+    await db.query(`select set_config('astera.uzytkownik', $1, true)`, [KTO.ania]);
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    const rolaPoFladze = (await db.query(
+      `update public.profile set rola='admin' where id = public.uid() returning rola`
+    )).rows[0]?.rola ?? 'brak wiersza';
+    await db.query('rollback');
+
+    //  B3: sama ścieżka inicjalizacyjna jest dla niego zamknięta —
+    //      nie wywoła ani funkcji pierwszego admina, ani funkcji
+    //      rozstrzygającej o kontekście.
+    const drogaFunkcja = await jako(KTO.norbert,
+      `select public.ustanow_pierwszego_admina('ania@przyklad.pl')`);
+    const drogaKontekst = await jako(KTO.norbert,
+      `select public.kontekst_inicjalizacji()`);
+
+    //  B4: flaga nie otwiera furtki na ostatniego administratora.
+    //      Stan doprowadzamy do jednego admina W TEJ SAMEJ transakcji,
+    //      żeby test nie zależał od kolejności wcześniejszych prób —
+    //      pierwsza wersja tego nie robiła i „przechodziła" tylko
+    //      dlatego, że test 18 zostawiał w bazie drugiego admina.
+    let ostatniAdmin;
+    await db.query('begin');
+    try {
+      await db.query('set local role astera_seed');
+      await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+      await db.query(`update public.profile set rola='instruktor'
+                       where rola='admin' and aktywne and id <> $1`, [KTO.norbert]);
+      await db.query(`select set_config('astera.inicjalizacja','nie',true)`);
+      await db.query('set local role astera_api');
+      await db.query(`select set_config('astera.uzytkownik', $1, true)`, [KTO.norbert]);
+      await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+      await db.query(`update public.profile set rola='instruktor' where id = public.uid()`);
+      ostatniAdmin = 'PRZESZŁO — ŹLE';
+    } catch (e) { ostatniAdmin = 'zablokowane'; }
+    await db.query('rollback');
+
+    const bOk = !/ŹLE/.test(wejscieWRole)
+             && rolaPoFladze !== 'admin'
+             && !drogaFunkcja.ok && !drogaKontekst.ok
+             && ostatniAdmin === 'zablokowane';
+
+    // ── C. Prawidłowa, kontrolowana inicjalizacja nadal działa ────
+    await db.query('begin');
+    await db.query('set local role astera_seed');
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    const kontekstZRola = (await db.query(
+      `select public.kontekst_inicjalizacji() k`)).rows[0].k;
+    await db.query(`update public.profile set rola='instruktor' where id=$1`, [idProby]);
+    await db.query('commit');
+    const poPrawidlowymSeedzie = await rolaKonta(idProby);
+
+    const cOk = kontekstZRola === true && poPrawidlowymSeedzie === 'instruktor';
+
+    sprawdz(28, 'Inicjalizacja wymaga jawnej roli `astera_seed` — brak tożsamości nią nie jest',
+      aOk && bOk && cOk,
+      `bez roli (sama flaga): kontekst=${kontekstBezRoli}, rola konta=${poProbieBezRoli} · ` +
+      `astera_seed: ${wejscieWRole} · z własną flagą: ${rolaPoFladze} · ` +
+      `ustanow_pierwszego_admina: ${drogaFunkcja.ok ? 'DOSTĘPNA — ŹLE' : 'brak uprawnień'} · ` +
+      `kontekst_inicjalizacji: ${drogaKontekst.ok ? 'DOSTĘPNA — ŹLE' : 'brak uprawnień'} · ` +
+      `ostatni admin: ${ostatniAdmin} · ` +
+      `kontrolowany seed: kontekst=${kontekstZRola}, rola konta=${poPrawidlowymSeedzie}`);
+
+    await db.query(`delete from auth.users where email = 'proba.seed@przyklad.pl'`);
+  }
+
+  /* ── 29. Instruktorka MOŻE redagować własny draft ──────────────────
+
+     Test istnieje, bo zabezpieczenie z testu 28 miało skutek uboczny,
+     którego nie wykryła żadna dotychczasowa próba: wyzwalacz broniący
+     treści zatwierdzonych sięgał po `kontekst_inicjalizacji()` prawami
+     WYWOŁUJĄCEGO, a rola aplikacyjna prawa do tej funkcji nie ma
+     i mieć nie powinna. Maliwan dostawała „permission denied" zamiast
+     zapisu — cała ścieżka redagowania była martwa.
+
+     Żaden test tego nie łapał, bo wszystkie CZYTAŁY tabele `*_tekst`.
+     Ten jako pierwszy do nich PISZE.                          [Etap 1a] */
+  {
+    const WERSJA = '99999999-0000-0000-0000-000000000029';
+
+    // Etap kursu podstawowego (prowadzi go Maliwan) wraz z jego wersją
+    // ZATWIERDZONĄ, która przyszła z importu arkusza.
+    const { rows: [cel] } = await db.query(
+      `select w.id zatwierdzona, w.etap_id
+         from public.etap_wersja w
+         join public.etap e   on e.id = w.etap_id
+         join public.lekcja l on l.id = e.lekcja_id
+        where l.kurs_id = $1 and w.status = 'zatwierdzone' limit 1`,
+      [KURS.podstawowy]);
+
+    // Obok niej — draft. Reguła „jedna zatwierdzona na etap" dotyczy
+    // wyłącznie statusu 'zatwierdzone', więc draft ma prawo tu być.
+    await db.query('begin');
+    await db.query('set local role astera_seed');
+    await db.query(`select set_config('astera.inicjalizacja','tak',true)`);
+    await db.query(
+      `insert into public.etap_wersja (id, etap_id, numer, status, autor_id)
+       values ($1, $2, 29, 'draft', $3)`, [WERSJA, cel.etap_id, KTO.maliwan]);
+    await db.query('commit');
+
+    // zapis draftu przez Core, w roli aplikacyjnej i z tożsamością Maliwan
+    const zapis = await jako(KTO.maliwan,
+      `insert into public.etap_tekst (etap_wersja_id, jezyk, nazwa, cel)
+       values ($1,'pl','Poprawka Maliwan','cel próbny') returning nazwa`,
+      [WERSJA]);
+
+    // dla kontrastu: treść wersji ZATWIERDZONEJ ma pozostać zamknięta
+    const zamkniete = await jako(KTO.maliwan,
+      `update public.etap_tekst set nazwa = 'Podmiana bez nowej wersji'
+        where etap_wersja_id = $1 and jezyk = 'pl'`, [cel.zatwierdzona]);
+
+    await db.query(`delete from public.etap_wersja where id=$1`, [WERSJA]);
+
+    sprawdz(29, 'Instruktorka redaguje własny draft przez Core — a wersji zatwierdzonej już nie',
+      zapis.ok && !zamkniete.ok && /zamkni/i.test(zamkniete.blad || ''),
+      `draft: ${zapis.ok ? 'zapisany' : 'ODMOWA — ' + zapis.blad} · ` +
+      `zatwierdzona: ${zamkniete.ok ? 'ZAPISANA — ŹLE' : zamkniete.blad}`);
   }
 
   /* sprzątanie po testach 17–18 i 21 */
