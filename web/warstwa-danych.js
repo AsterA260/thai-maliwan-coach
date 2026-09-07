@@ -5,10 +5,13 @@
    się dane. Wołają wyłącznie `DANE.<funkcja>()`. Ten plik decyduje, co
    pod tym siedzi:
 
+     • jest konfiguracja AWS (CORE_URL + pula i klient Cognito)
+         → dociąga SDK Cognito, auth-cognito.js i dane-aws.js,
+           DANE = window.DANE_AWS                 → TRYB 'aws'       [Etap 2]
      • jest konfiguracja Supabase (konfig.js z niepustym SUPABASE_URL)
          → dociąga bibliotekę Supabase i dane-supabase.js,
            DANE = window.DANE_SUPABASE            → TRYB 'supabase'
-     • nie ma jej
+     • nie ma żadnej
          → adapter na serwer deweloperski /api/*  → TRYB 'lokalny'
 
    Żadnej ręcznej podmiany kodu przed wdrożeniem. Wdrożenie podmienia
@@ -25,8 +28,13 @@
   'use strict';
 
   const K = window.KONFIG || {};
+  // Trzy tryby, wybierane WYŁĄCZNIE konfiguracją:
+  //   AWS       CORE_URL + COGNITO_POOL_ID + COGNITO_CLIENT_ID     (docelowy)
+  //   Supabase  SUPABASE_URL + klucz publiczny                      (prototyp, ścieżka wycofania)
+  //   lokalny   nic z powyższych                                    (serwer deweloperski)
+  const AWS = !!(K.CORE_URL && K.COGNITO_POOL_ID && K.COGNITO_CLIENT_ID);
   // Nowy klucz publiczny (`sb_publishable_…`) albo starszy `anon`.
-  const PRODUKCJA = !!(K.SUPABASE_URL && (K.SUPABASE_PUBLISHABLE_KEY || K.SUPABASE_ANON_KEY));
+  const PRODUKCJA = !AWS && !!(K.SUPABASE_URL && (K.SUPABASE_PUBLISHABLE_KEY || K.SUPABASE_ANON_KEY));
 
   /* ── nazwy funkcji, które MUSI mieć każda warstwa ─────────────── */
   const KONTRAKT = [
@@ -136,9 +144,20 @@
     return warstwa;
   }
 
-  window.TRYB = PRODUKCJA ? 'supabase' : 'lokalny';
+  window.TRYB = AWS ? 'aws' : PRODUKCJA ? 'supabase' : 'lokalny';
 
   window.GOTOWE = (async () => {
+    if (AWS) {
+      // Kolejność ma znaczenie: SDK Cognito → sześć funkcji Auth → osiemnaście danych.
+      if (!window.AmazonCognitoIdentity)
+        await dociagnij('https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js');
+      if (!window.AUTH_COGNITO) await dociagnij('auth-cognito.js');
+      if (!window.DANE_AWS)     await dociagnij('dane-aws.js');
+      if (!window.AUTH_COGNITO || !window.DANE_AWS)
+        throw new Error('Konfiguracja wskazuje AWS, ale warstwa danych się nie wczytała.');
+      window.DANE = sprawdzKontrakt(window.DANE_AWS, 'aws');
+      return window.DANE;
+    }
     if (!PRODUKCJA) {
       window.DANE = sprawdzKontrakt(LOKALNA, 'lokalna');
       return window.DANE;

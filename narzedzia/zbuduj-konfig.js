@@ -27,8 +27,13 @@ const ENV     = path.join(KATALOG, '.env');
 const WYJSCIE = path.join(KATALOG, 'web', 'konfig.js');
 
 const DOZWOLONE = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY',
-                   'SUPABASE_BUCKET', 'ADRES_APLIKACJI'];
-const SEKRETNE  = ['SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
+                   'SUPABASE_BUCKET', 'ADRES_APLIKACJI',
+                   // tryb AWS (Etap 2) — wyłącznie dane publiczne
+                   'CORE_URL', 'COGNITO_POOL_ID', 'COGNITO_CLIENT_ID'];
+const SEKRETNE  = ['SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
+                   // AWS: nic z tego nie ma prawa trafić do przeglądarki
+                   'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN',
+                   'DATABASE_URL', 'COGNITO_CLIENT_SECRET', 'SEKRET_LINKOW'];
 
 function wczytaj(plik) {
   if (!fs.existsSync(plik)) {
@@ -60,6 +65,10 @@ if (dane.SUPABASE_URL && !dane.SUPABASE_PUBLISHABLE_KEY && dane.SUPABASE_ANON_KE
   console.warn('UWAGA: używasz starego klucza `anon`. Supabase wygasza go do końca 2026 —\n' +
                '       w panelu API Keys wygeneruj `sb_publishable_…` i wpisz go\n' +
                '       jako SUPABASE_PUBLISHABLE_KEY.');
+if (dane.CORE_URL && !(dane.COGNITO_POOL_ID && dane.COGNITO_CLIENT_ID)) {
+  console.error('BŁĄD: podano CORE_URL, ale brak COGNITO_POOL_ID albo COGNITO_CLIENT_ID.');
+  process.exit(1);
+}
 if (dane.SUPABASE_URL && !dane.SUPABASE_PUBLISHABLE_KEY && !dane.SUPABASE_ANON_KEY) {
   console.error('BŁĄD: podano SUPABASE_URL, ale żadnego klucza publicznego.');
   process.exit(1);
@@ -76,7 +85,7 @@ for (const k of znalezioneSekrety) {
     process.exit(1);
   }
 }
-if (/sb_secret_|service_role/.test(tresc)) {
+if (/sb_secret_|service_role|AKIA[0-9A-Z]{16}|postgresql:\/\//.test(tresc)) {
   console.error('BŁĄD: w konfiguracji frontu jest coś, co wygląda na klucz sekretny. Przerywam.');
   process.exit(1);
 }

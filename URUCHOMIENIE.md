@@ -722,3 +722,72 @@ najspokojniejszym miesiącu.
 - klucz `martin-etap1b` i klucz deploy: usunąć po etapie;
 - runner EC2 `astera-etap1b-runner` jest ZATRZYMANY (nie usunięty) — start
   jednym poleceniem, gdy będzie potrzebny do Etapu 2.
+
+---
+
+## 9 · AsterA Core + Cognito — część lokalna                     [Etap 2]
+
+Przygotowane bez tworzenia czegokolwiek w AWS. Wszystko poniżej działa
+na lokalnej bazie z atrapą Cognito; ścieżka weryfikacji tokenu jest
+DOKŁADNIE produkcyjna, różni się wyłącznie kluczem prywatnym wystawcy.
+
+### 9.1 Dwie skorupy, jeden rdzeń
+
+```
+serwer/api.js          rdzeń: 18 handlerów danych, zapytaj/wTransakcji,
+                       pliki, serwer HTTP — ciała bajt w bajt z dev.js
+serwer/dev.js          skorupa lokalna: sesje w ciasteczku, hasła demo
+serwer/core.js         skorupa produkcyjna: token Cognito w nagłówku,
+                       konta w Cognito, CORS na jeden origin
+serwer/cognito-token.js weryfikacja RS256/JWKS/iss/aud/exp/token_use — bez zależności
+serwer/tozsamosc.js    dostawca kont: Cognito (SDK) albo atrapa (testy)
+```
+
+Core **nie ma** `POST /api/logowanie` ani `/api/wylogowanie` — przeglądarka
+rozmawia z Cognito (USER_SRP_AUTH), Core nigdy nie widzi hasła. Test Core 5
+pilnuje, żeby nikt tego nie dopisał.
+
+### 9.2 Zaproszenie w Core = konto + profil, z wycofaniem
+
+```
+admin → POST /api/zapros
+  1. zaproszenie w bazie (skrót tokenu, jak dotąd)
+  2. tozsamosc.utworzKonto(email, imie)  → Cognito AdminCreateUser, MessageAction=SUPPRESS
+                                            (wiadomość wyśle Core przez SES — Etap 4)
+  3. insert public.profile (id = sub, rola z zaproszenia)  w kontekście admina
+  4. profil się nie zapisał? → tozsamosc.usunKonto(sub). Nigdy konto bez profilu.
+```
+
+Migracja `008` zdejmuje klucz obcy `profile.id → auth.users` — `sub`
+z Cognito nie ma i nie będzie miał wiersza w atrapie Auth. Skutek uboczny,
+którego pilnują testy: profil **nie kasuje się kaskadą** — kasowanie konta
+jest sprawą Core.
+
+### 9.3 Front — trzeci tryb
+
+`konfig.js` z `CORE_URL + COGNITO_POOL_ID + COGNITO_CLIENT_ID` → tryb `aws`:
+`auth-cognito.js` (6 funkcji Auth, SDK amazon-cognito-identity-js z CDN)
++ `dane-aws.js` (18 funkcji danych, wyłącznie Core). Ekrany bez zmian.
+Test kontraktów 20: żadna z 18 funkcji nie wykonała żądania poza Core —
+sprawdzone przechwyceniem ruchu, nie przeglądem kodu.
+
+`auth-cognito.js` to **szkielet nietestowany lokalnie** — SRP i wyzwanie
+NEW_PASSWORD_REQUIRED istnieją tylko w prawdziwej puli.
+
+### 9.4 Uruchomienie Core
+
+```sh
+export DATABASE_URL="$(narzedzia/aurora-url.sh api)" PGSSLROOTCERT=/opt/global-bundle.pem
+export COGNITO_REGION=eu-central-1 COGNITO_POOL_ID=… COGNITO_CLIENT_ID=…
+export CORE_ORIGIN=https://coach.thaimaliwan.pl CORE_HOST=0.0.0.0 PORT=8920
+npm run core
+```
+
+Poświadczenia AWS dla SDK Cognito bierze rola IAM instancji — nic w plikach.
+
+### 9.5 Co czeka na AWS (Etap 2, część 2)
+
+pula Cognito + klient `USER_SRP_AUTH` + polityka haseł + natywna blokada
+(A8) · pierwszy administrator: konto w Cognito → `ustanow_pierwszego_admina`
+z `sub` · Core na EC2/ECS w VPC · odpowiedniki A1–A3, A6–A8 na żywo ·
+`testy/core.js` z prawdziwym JWKS (wystarczy podać `COGNITO_POOL_ID`).

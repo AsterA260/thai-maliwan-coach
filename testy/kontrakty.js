@@ -333,6 +333,85 @@ function atrapaSupabase(tabele, kontekst) {
     kontekst.wylogowany === true,
     'signOut() wywołany');
 
+  /* ══ WARSTWA AWS — dane-aws.js przeciw prawdziwemu Core ═══════
+     Core biegnie w tym procesie na tej samej lokalnej bazie, tokeny
+     wystawia atrapa Cognito (testy/cognito_atrapa.js). Sześć funkcji
+     Auth podstawia atrapa — SRP nie da się sprawdzić bez prawdziwej
+     puli. Osiemnaście funkcji danych idzie NAPRAWDĘ przez HTTP do Core.
+                                                              [Etap 2] */
+  const { AtrapaCognito }   = require('./cognito_atrapa');
+  const { TozsamoscAtrapa } = require('../serwer/tozsamosc');
+  const { uruchomCore }     = require('../serwer/core');
+  const cognito = new AtrapaCognito(); await cognito.uruchom();
+  const core = uruchomCore({ tozsamosc: new TozsamoscAtrapa(),
+    env: { ...cognito.srodowisko(), PORT: '0', CORE_TOZSAMOSC: 'atrapa' } });
+  const CORE_URL = `http://127.0.0.1:${await core.start()}`;
+
+  let ktoAWS = maliwan.id;
+  const atrapaAuth = {
+    token: async () => cognito.token(ktoAWS, { uzycie: 'access' }),
+    zaloguj: async email => { ktoAWS = TABELE.profile.find(p => p.email === email).id; return oknoA.DANE_AWS.ja(); },
+    wyloguj: async () => { ktoAWS = null; },
+    ja: async () => oknoA.DANE_AWS.ja(),
+    wyslijLinkResetu: async () => {}, sesjaZLinku: async () => ({ jest: false, typ: null }),
+    ustawHaslo: async () => {},
+  };
+  const ruchAWS = [];
+  const fetchAWS = (url, o) => { ruchAWS.push(String(url)); return fetch(url, o); };
+  const oknoA = {
+    KONFIG: { CORE_URL, COGNITO_POOL_ID: cognito.pula, COGNITO_CLIENT_ID: cognito.klient },
+    AmazonCognitoIdentity: {}, AUTH_COGNITO: atrapaAuth,
+  };
+  const lokalizacjaA = { pathname: '/app.html', href: '', origin: 'https://coach.thaimaliwan.pl', search: '' };
+  uruchom('dane-aws.js',        { window: oknoA, document: atrapaDokumentu(), location: lokalizacjaA, fetch: fetchAWS });
+  uruchom('warstwa-danych.js',  { window: oknoA, document: atrapaDokumentu(), location: lokalizacjaA, fetch: fetchAWS });
+  await oknoA.GOTOWE;
+  const A = oknoA.DANE;
+
+  /* ══ 16. komplet i wybór trybu ═══════════════════════════════ */
+  const brakA = KONTRAKT.filter(f => typeof A[f] !== 'function');
+  sprawdz(16, `Warstwa AWS ma wszystkie ${KONTRAKT.length} funkcje; tryb wybiera sam konfig.js`,
+    brakA.length === 0 && oknoA.TRYB === 'aws' && oknoA.DANE === oknoA.DANE_AWS,
+    brakA.length ? `brakuje: ${brakA.join(', ')}` : `tryb: ${oknoA.TRYB}`);
+
+  /* ══ 17. te same kształty co warstwa lokalna ═════════════════ */
+  const jaA = await A.ja();
+  const kursanciA = await A.kursanci();
+  const kursA = await A.kurs(kursMaliwan.id);
+  const pytaniaA = await A.pytania();
+  sprawdz(17, 'ja(), kursanci(), kurs(), pytania() przez Core mają te same pola co lokalnie',
+    klucze(jaA) === klucze(jaL) && klucze(kursanciA[0]) === klucze(kursanciL[0]) &&
+    klucze(kursA) === klucze(kursL) && klucze(pytaniaA[0]) === klucze(pytaniaL[0]),
+    `ja: ${klucze(jaA) === klucze(jaL)} · kursanci: ${klucze(kursanciA[0]) === klucze(kursanciL[0])} · ` +
+    `kurs: ${klucze(kursA) === klucze(kursL)} · pytania: ${klucze(pytaniaA[0]) === klucze(pytaniaL[0])}`);
+
+  /* ══ 18. materiał przez Core: plik w obie strony ═════════════ */
+  const materialA = await A.wgrajMaterial({ kurs_id: kursMaliwan.id, typ: 'pdf', nazwa: 'Kontrakt AWS', plik });
+  await A.publikujMaterial(materialA.id, true);
+  const linkA = await A.linkDoMaterialu(materialA.id);
+  await A.usunMaterial(materialA.id);
+  sprawdz(18, 'wgrajMaterial() i linkDoMaterialu() przez Core zwracają to samo co lokalnie',
+    maPola(materialA, ['id','nazwa','sciezka','rozmiar_b']) && klucze(linkA) === 'link,nazwa,wazny_s',
+    `materiał: ${materialA.sciezka} · link: ${klucze(linkA)}`);
+
+  /* ══ 19. zapros() przez Core: konto + profil, bez linku na ekranie ══ */
+  await A.zaloguj('norbert@thaimaliwan.pl');
+  await db.query(`delete from public.profile where email='kontrakt.aws@przyklad.pl'`);
+  const zapA = await A.zapros({ imie: 'Kontrakt AWS', email: 'kontrakt.aws@przyklad.pl', rola: 'kursant' });
+  sprawdz(19, 'zapros() przez Core zakłada konto i profil; linku na ekranie nie ma',
+    zapA && zapA.zaproszenie && zapA.konto && zapA.konto.id && zapA.link_lokalny === undefined,
+    `pola: ${klucze(zapA)} · konto: ${zapA?.konto?.id ? 'jest' : 'brak'}`);
+
+  /* ══ 20. ROZGRANICZENIE: 18 funkcji danych nie wychodzi poza Core ══ */
+  const pozaCore = ruchAWS.filter(u => !u.startsWith(CORE_URL));
+  sprawdz(20, 'Żadna z funkcji danych warstwy AWS nie wykonała żądania poza Core API',
+    ruchAWS.length >= 8 && pozaCore.length === 0,
+    `żądań: ${ruchAWS.length}, wszystkie do ${CORE_URL}` + (pozaCore.length ? ` · POZA: ${pozaCore.join(', ')}` : ''));
+
+  await db.query(`delete from public.profile where email='kontrakt.aws@przyklad.pl'`);
+  await db.query(`delete from public.zaproszenie where email='kontrakt.aws@przyklad.pl'`);
+  await core.stop(); cognito.zatrzymaj();
+
   /* ══ podsumowanie ════════════════════════════════════════════ */
   await db.query(`delete from public.zaproszenie where email = 'kontrakt@przyklad.pl'`);
   await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do kontraktow'`);

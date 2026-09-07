@@ -793,6 +793,9 @@ function sprawdz(nr, opis, warunek, szczegol) {
       `ostatni admin: ${ostatniAdmin} · ` +
       `kontrolowany seed: kontekst=${kontekstZRola}, rola konta=${poPrawidlowymSeedzie}`);
 
+    // Od migracji 008 profil NIE kasuje się kaskadą z auth.users —
+    // kasowanie konta jest sprawą Core, nie bazy. Sprzątamy oba wprost.
+    await db.query(`delete from public.profile where email = 'proba.seed@przyklad.pl'`);
     await db.query(`delete from auth.users where email = 'proba.seed@przyklad.pl'`);
   }
 
@@ -850,6 +853,8 @@ function sprawdz(nr, opis, warunek, szczegol) {
   }
 
   /* sprzątanie po testach 17–18 i 21 */
+  await db.query(`delete from public.profile where email in
+    ('nowy.instruktor@przyklad.pl','nowy.admin@przyklad.pl','kontrola.roli@przyklad.pl')`);
   await db.query(`delete from auth.users where email in
     ('nowy.instruktor@przyklad.pl','nowy.admin@przyklad.pl','kontrola.roli@przyklad.pl')`);
   await db.query(`delete from public.pytanie where tresc = 'Pytanie kontrolne do testu 21'`);

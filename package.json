@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1127.0",
     "pg": "^8.23.0"
   },
   "name": "astera-coach",
@@ -8,7 +9,7 @@
   "private": true,
   "scripts": {
     "start": "node serwer/dev.js",
-    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js",
+    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js",
     "testy:baza": "node testy/bezpieczenstwo.js",
     "testy:http": "node testy/http.js",
     "testy:import": "node testy/import.js",
@@ -16,6 +17,9 @@
     "testy:kontrakty": "node testy/kontrakty.js",
     "konfig": "node narzedzia/zbuduj-konfig.js",
     "e2e": "node testy/e2e_supabase.js",
-    "projekt:testowy": "node narzedzia/zaloz-projekt.js"
+    "projekt:testowy": "node narzedzia/zaloz-projekt.js",
+    "testy:core": "node testy/core.js",
+    "core": "node serwer/core.js",
+    "testy:aurora": "node testy/rola_api_na_zywo.js && node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js"
   }
 }
