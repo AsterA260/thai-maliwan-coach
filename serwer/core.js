@@ -38,7 +38,7 @@ function uruchomCore(opcje = {}) {
   const ORIGIN = env.CORE_ORIGIN || null;
   const SEKRET = env.SEKRET_LINKOW || crypto.randomBytes(32).toString('hex');
 
-  const pool = opcje.pool || new Pool({ ...require('../testy/polaczenie').DB, max: Number(env.CORE_PULA || 10) });
+  const pool = opcje.pool || new Pool({ ...require('../testy/polaczenie').zUrl(env.DATABASE_URL, env.PGSSLROOTCERT), max: Number(env.CORE_PULA || 10) });
   const weryfikator = opcje.weryfikator || new Weryfikator({
     region: env.COGNITO_REGION, pula: env.COGNITO_POOL_ID, klient: env.COGNITO_CLIENT_ID,
     issuer: env.COGNITO_ISSUER, jwksUrl: env.COGNITO_JWKS_URL });
@@ -67,6 +67,10 @@ function uruchomCore(opcje = {}) {
           values ($1, $2, $3, $4)
           returning id, email, imie, rola`, [konto.id, z.email, z.imie, z.rola]);
         if (!p) throw new Error('Profil nie został zapisany (polityka odrzuciła zapis).');
+        // Hasło tymczasowe idzie WYŁĄCZNIE do wysyłki zaproszenia (Etap 4, SES).
+        // Do odpowiedzi HTTP nie trafia nigdy — zwracamy sam identyfikator i rolę.
+        if (opcje.wyslijZaproszenie)
+          await opcje.wyslijZaproszenie({ email: z.email, imie: z.imie, haslo_tymczasowe: konto.haslo_tymczasowe });
         return { id: p.id, rola: p.rola };
       } catch (e) {
         await tozsamosc.usunKonto(konto.id).catch(() => {});

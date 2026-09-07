@@ -785,9 +785,33 @@ npm run core
 
 Poświadczenia AWS dla SDK Cognito bierze rola IAM instancji — nic w plikach.
 
-### 9.5 Co czeka na AWS (Etap 2, część 2)
+### 9.5 Cognito na żywo — wykonane                                [Etap 2 AWS]
 
-pula Cognito + klient `USER_SRP_AUTH` + polityka haseł + natywna blokada
-(A8) · pierwszy administrator: konto w Cognito → `ustanow_pierwszego_admina`
-z `sub` · Core na EC2/ECS w VPC · odpowiedniki A1–A3, A6–A8 na żywo ·
-`testy/core.js` z prawdziwym JWKS (wystarczy podać `COGNITO_POOL_ID`).
+Pula `astera-coach-etap2` (eu-central-1): e-mail jako login, konta zakłada
+wyłącznie administrator, hasło ≥10 znaków z wielką, małą literą i cyfrą,
+odzyskiwanie przez zweryfikowany e-mail, ochrona przed usunięciem.
+Klient `coach-web`: bez sekretu, **wyłącznie** `USER_SRP_AUTH` +
+`REFRESH_TOKEN_AUTH` (hasłem wprost logować się nie da), tokeny 60 min,
+odświeżanie 30 dni, `PreventUserExistenceErrors` — nieistniejące konto
+dostaje tę samą odmowę co złe hasło.
+
+`testy/cognito_na_zywo.js` — 9/9 przeciw prawdziwej puli, z runnera:
+A1 SRP → tokeny · A2 złe hasło · A3 nieistniejące konto = ta sama odmowa ·
+C1 Core z prawdziwym JWKS · C2 token ID i zepsuty podpis → 401 ·
+Z zaproszenie przez Core → NEW_PASSWORD_REQUIRED → nowe hasło → dane ·
+A7 wyłączenie w Core = odmowa w Cognito · A6 wylogowanie globalne ·
+**A8 blokada natywna po 6 błędnych próbach** („Password attempts
+exceeded"), poprawne hasło w trakcie blokady też odrzucone.
+
+**Hasło tymczasowe.** `AdminCreateUser` z `MessageAction=SUPPRESS` nie
+wysyła nic — więc Core generuje hasło tymczasowe sam i oddaje je
+wyłącznie do wysyłki zaproszenia (`opcje.wyslijZaproszenie`, Etap 4).
+Do odpowiedzi HTTP nie trafia nigdy; test Z to sprawdza.
+
+**Pierwszy administrator na AWS:** konto w Cognito (`utworzKonto`) →
+profil z `id = sub` w roli `astera_seed` → od tej chwili wszystko
+z aplikacji. Runner ma `cognito-idp:AdminSetUserPassword` **wyłącznie
+do testów** (hasła kont testowych) — przed produkcją zdjąć.
+
+Czeka: wysyłka zaproszeń i resetów (SES, Etap 4), Core za HTTPS pod
+własnym adresem (Etap 6), front w trybie `aws` przeciw żywej puli (Etap 5).

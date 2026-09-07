@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1127.0",
+    "amazon-cognito-identity-js": "^6.3.20",
     "pg": "^8.23.0"
   },
   "name": "astera-coach",
@@ -20,6 +21,7 @@
     "projekt:testowy": "node narzedzia/zaloz-projekt.js",
     "testy:core": "node testy/core.js",
     "core": "node serwer/core.js",
-    "testy:aurora": "node testy/rola_api_na_zywo.js && node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js"
+    "testy:aurora": "node testy/rola_api_na_zywo.js && node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js",
+    "testy:cognito": "node testy/cognito_na_zywo.js"
   }
 }

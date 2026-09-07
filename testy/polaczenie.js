@@ -29,10 +29,14 @@ function bezSslmode(u) {
   return x.toString();
 }
 
-const DB = URL
-  ? { connectionString: bezSslmode(URL),
-      ssl: CA ? { ca: fs.readFileSync(CA, 'utf8'), rejectUnauthorized: true }
-              : { rejectUnauthorized: false } }
-  : { host: '/tmp', port: 5433, user: 'postgres', database: 'coach' };
+/** Konfiguracja dla PODANEGO adresu (Core dostaje adres ze swojego env). */
+function zUrl(url, ca = CA) {
+  return url
+    ? { connectionString: bezSslmode(url),
+        ssl: ca ? { ca: fs.readFileSync(ca, 'utf8'), rejectUnauthorized: true }
+                : { rejectUnauthorized: false } }
+    : { host: '/tmp', port: 5433, user: 'postgres', database: 'coach' };
+}
+const DB = zUrl(URL);
 
-module.exports = { DB, zdalna: !!URL, weryfikacjaTls: !!CA };
+module.exports = { DB, zUrl, zdalna: !!URL, weryfikacjaTls: !!CA };
