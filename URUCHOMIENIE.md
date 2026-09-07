@@ -815,3 +815,52 @@ do testów** (hasła kont testowych) — przed produkcją zdjąć.
 
 Czeka: wysyłka zaproszeń i resetów (SES, Etap 4), Core za HTTPS pod
 własnym adresem (Etap 6), front w trybie `aws` przeciw żywej puli (Etap 5).
+
+---
+
+## 10 · Magazyn plików — S3                                       [Etap 3]
+
+### 10.1 Bucket `astera-coach-materialy` (eu-central-1)
+
+Blokada dostępu publicznego (wszystkie cztery flagi) · szyfrowanie domyślne
+AES256 z kluczem bucketu · ACL wyłączone (`BucketOwnerEnforced`) · polityka:
+**odmowa bez TLS** i odmowa wgrań z innym szyfrowaniem niż AES256 ·
+porzucone wgrania wieloczęściowe sprzątane po 2 dniach.
+
+Nikt nie loguje się do S3 kluczem. Core na runnerze/instancji bierze
+poświadczenia z roli IAM (`s3-materialy`: obiekty tylko w tym buckecie).
+
+### 10.2 Jak Core używa magazynu
+
+`serwer/magazyn.js` — jeden interfejs, trzy wcielenia: **dysk** (dev),
+**S3** (Core, `S3_BUCKET` w środowisku), **atrapa** (testy, z przełącznikiem
+awarii). Front nie zna bucketu ani poświadczeń:
+
+```
+wgranie   przeglądarka → Core (strumień) → plik tymczasowy NA DYSKU CORE
+          → metadane przez RLS → dopiero teraz PutObject → 200
+          metadane odrzucone?  → plik tymczasowy kasowany, S3 nietknięte
+          PutObject nie wyszedł? → rekord kasowany, odpowiedź 500
+pobranie  Core pyta bazę (RLS) o wiersz → dopiero wtedy adres podpisany
+          GET, 300 s, Content-Disposition z nazwą → front idzie pod ten adres
+```
+
+Klucze pilnowane w DWÓCH miejscach: regex w Core (`bezpiecznyKlucz`)
+i ograniczenia CHECK w bazie (`kurs_ze_sciezki`, `glosowka_z_klucza`).
+
+### 10.3 Głosówki
+
+`POST /api/glosowka/plik?technika_id=…|etap_id=…&jezyk=th` (audio przez
+Core), `GET /api/glosowka/link?id=…`, `POST /api/glosowka/usun`. Klucz
+`glosowka/<technika|etap>/<uuid encji>/<uuid nagrania>.<ext>` buduje Core
+z identyfikatorów; baza odrzuca każdy, który wskazuje inną encję.
+
+### 10.4 Czym to jest sprawdzone
+
+`testy/magazyn.js` — lokalnie na atrapie i na żywo (`MAGAZYN_TEST=s3`),
+11/11 w obu: S1 anonimowy GET → 403, adres podpisany → 200 i te same
+bajty, SSE AES256 · S2 wgranie do własnego kursu · S3 adres tylko po RLS ·
+S4 adres wygasa (po 1 s → 403) · S5 kursantka spoza kursu → 403 ·
+S6 kursantka nie wgra · **S7** odmowa metadanych → zero obiektów;
+awaria magazynu (bucket bez uprawnień) → rekord skasowany · S8 usunięcie
+kasuje obiekt · G1–G3 głosówki: klucz zgodny, autoryzacja, CHECK w bazie.

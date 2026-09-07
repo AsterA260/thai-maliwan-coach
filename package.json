@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1127.0",
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "amazon-cognito-identity-js": "^6.3.20",
     "pg": "^8.23.0"
   },
@@ -10,7 +12,7 @@
   "private": true,
   "scripts": {
     "start": "node serwer/dev.js",
-    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js",
+    "testy": "node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js && node testy/magazyn.js",
     "testy:baza": "node testy/bezpieczenstwo.js",
     "testy:http": "node testy/http.js",
     "testy:import": "node testy/import.js",
@@ -22,6 +24,7 @@
     "testy:core": "node testy/core.js",
     "core": "node serwer/core.js",
     "testy:aurora": "node testy/rola_api_na_zywo.js && node testy/bezpieczenstwo.js && node testy/http.js && node testy/import.js && node testy/kontrakty.js && node testy/core.js",
-    "testy:cognito": "node testy/cognito_na_zywo.js"
+    "testy:cognito": "node testy/cognito_na_zywo.js",
+    "testy:magazyn": "node testy/magazyn.js"
   }
 }

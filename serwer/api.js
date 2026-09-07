@@ -30,6 +30,10 @@ const crypto = require('crypto');
 module.exports = function zbudujApi(zal) {
 const { pool, SEKRET } = zal;
 const MAGAZYN = zal.MAGAZYN || path.join(__dirname, '..', 'magazyn', 'materialy');
+// Etap 3: pliki żyją w magazynie za interfejsem — dysk (dev), S3 (Core), atrapa (testy).
+const magazynMod = require('./magazyn');
+const magazyn = zal.magazyn || new magazynMod.MagazynDysk({ katalog: MAGAZYN, sekret: SEKRET });
+const TMP = zal.TMP || MAGAZYN;   // pliki tymczasowe zawsze na dysku Core, także przy S3
 const LIMIT_B = 25 * 1024 * 1024;                                     // 25 MB
 const DOZWOLONE = {
   pdf:     ['application/pdf'],
@@ -94,25 +98,7 @@ async function profil(sesja){
 async function zabijSesjeUzytkownika(uid){ if (zal.uniewaznijUzytkownika) await zal.uniewaznijUzytkownika(uid); }
 
 /* ══ MAGAZYN PLIKÓW ══════════════════════════════════════════════ */
-const RE_SCIEZKA = /^kurs\/[0-9a-fA-F-]{36}\/(pdf|zdjecie|wideo|audio|inny)\/[A-Za-z0-9._-]+$/;
-
-function bezpiecznaSciezka(s){
-  return typeof s === 'string' && !s.includes('..') && RE_SCIEZKA.test(s);
-}
-function naDysku(s){ return path.join(MAGAZYN, s); }
-
-/** Odpowiednik createSignedUrl — link ważny 5 minut. */
-function podpisanyLink(sciezka, sekundy = 300){
-  const doKiedy = Date.now() + sekundy * 1000;
-  const sig = crypto.createHmac('sha256', SEKRET).update(sciezka + '|' + doKiedy).digest('hex');
-  return `/plik?s=${encodeURIComponent(sciezka)}&do=${doKiedy}&p=${sig}`;
-}
-function linkWazny(sciezka, doKiedy, sig){
-  if (!Number(doKiedy) || Number(doKiedy) < Date.now()) return false;
-  const ocz = crypto.createHmac('sha256', SEKRET).update(sciezka + '|' + doKiedy).digest('hex');
-  const a = Buffer.from(String(sig)), b = Buffer.from(ocz);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+const bezpiecznaSciezka = k => magazynMod.bezpiecznyKlucz(k) && magazynMod.RE_MATERIAL.test(k);
 
 /* ══ API ═════════════════════════════════════════════════════════ */
 const API = {
@@ -206,9 +192,10 @@ const API = {
       `select sciezka, nazwa, typ from public.widok_material where id = $1`, [c.id]);
     if (!m) return [403, { blad: 'Nie masz dostępu do tego materiału.' }];
     if (!bezpiecznaSciezka(m.sciezka)) return [400, { blad: 'Nieprawidłowa ścieżka pliku.' }];
-    if (!fs.existsSync(naDysku(m.sciezka)))
+    if (!await magazyn.istnieje(m.sciezka))
       return [404, { blad: 'Plik nie został jeszcze wgrany.' }];
-    return [200, { link: podpisanyLink(m.sciezka), nazwa: m.nazwa, wazny_s: 300 }];
+    // Adres podpisany powstaje DOPIERO tutaj — po tym, jak RLS oddał wiersz.
+    return [200, { link: await magazyn.link(m.sciezka, m.nazwa, 300), nazwa: m.nazwa, wazny_s: 300 }];
   },
 
   async 'POST /api/material/publikuj'(c, s){
@@ -224,7 +211,28 @@ const API = {
     const [m] = await zapytaj(s.uid, `select sciezka from public.material where id=$1`, [c.id]);
     const r = await zapytaj(s.uid, `delete from public.material where id=$1 returning id`, [c.id]);
     if (!r.length) return [403, { blad: 'Nie masz uprawnień do tego materiału.' }];
-    if (m && bezpiecznaSciezka(m.sciezka)) await fsp.rm(naDysku(m.sciezka), { force: true });
+    if (m && bezpiecznaSciezka(m.sciezka)) await magazyn.usun(m.sciezka).catch(() => {});
+    return [200, { ok: true }];
+  },
+
+  /* ── głosówki Maliwan (Etap 3) ─────────────────────────────── */
+  async 'GET /api/glosowka/link'(c, s){
+    if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
+    // RLS: kursant widzi głosówki z etapów/technik swoich kursów, instruktor swoje, admin wszystko.
+    const [g] = await zapytaj(s.uid,
+      `select klucz_s3, mime from public.glosowka where id = $1`, [c.id]);
+    if (!g) return [403, { blad: 'Nie masz dostępu do tej głosówki.' }];
+    if (!magazynMod.RE_GLOSOWKA.test(g.klucz_s3)) return [400, { blad: 'Nieprawidłowy klucz nagrania.' }];
+    if (!await magazyn.istnieje(g.klucz_s3)) return [404, { blad: 'Nagranie nie zostało jeszcze wgrane.' }];
+    return [200, { link: await magazyn.link(g.klucz_s3, path.basename(g.klucz_s3), 300), wazny_s: 300 }];
+  },
+
+  async 'POST /api/glosowka/usun'(c, s){
+    if (!await profil(s)) return [401, { blad: 'Nie jesteś zalogowany.' }];
+    const [g] = await zapytaj(s.uid, `select klucz_s3 from public.glosowka where id=$1`, [c.id]);
+    const r = await zapytaj(s.uid, `delete from public.glosowka where id=$1 returning id`, [c.id]);
+    if (!r.length) return [403, { blad: 'Nie masz uprawnień do tej głosówki.' }];
+    if (g && magazynMod.RE_GLOSOWKA.test(g.klucz_s3)) await magazyn.usun(g.klucz_s3).catch(() => {});
     return [200, { ok: true }];
   },
 
@@ -354,6 +362,10 @@ function czytelnyBlad(e){
     return 'Ten etap nie należy do wybranego kursu.';
   if (/nie jest zapisany na kurs/i.test(m))
     return 'Nie jesteś zapisany na kurs tego etapu.';
+  if (/glosowka_klucz_zgodny|glosowka_jeden_wlasciciel/.test(m))
+    return 'Klucz nagrania nie pasuje do techniki ani etapu.';
+  if (/profile_email_key/.test(m))
+    return 'Konto z tym adresem e-mail już istnieje.';
   return 'Nie udało się wykonać operacji.';
 }
 
@@ -363,6 +375,62 @@ function czytelnyBlad(e){
      2. dopiero potem zapisujemy metadane (przez RLS),
      3. jeżeli zapis metadanych się nie uda — kasujemy plik.
    Dzięki temu nie zostaje ani osierocony plik, ani rekord bez pliku. */
+/** Odbiór treści żądania do pliku tymczasowego, z twardym limitem.
+ *  Wspólne dla materiałów i głosówek. Zwraca { tymczasowy, bajtow }
+ *  albo null — wtedy odpowiedź już poszła. */
+async function odbierzDoTymczasowego(req, res){
+  const tymczasowy = path.join(TMP, '.tmp-' + crypto.randomBytes(8).toString('hex'));
+  try { await fsp.mkdir(TMP, { recursive: true }); }
+  catch (e) { req.resume(); odpowiedz(res, 500, { blad: 'Magazyn plików jest niedostępny.' }); return null; }
+
+  let bajtow = 0, zaDuzy = false, bladOdczytu = null, bladZapisu = null;
+  let strumien;
+  try { strumien = fs.createWriteStream(tymczasowy); }
+  catch (e) { req.resume(); odpowiedz(res, 500, { blad: 'Magazyn plików jest niedostępny.' }); return null; }
+
+  // Bez tej obsługi każdy błąd zapisu (brak praw, pełny dysk) leciał
+  // jako nieobsłużone zdarzenie i ZABIJAŁ CAŁY SERWER. Teraz kończy
+  // się jednym czytelnym błędem tego jednego żądania.
+  await new Promise(ok => {
+    let skonczone = false;
+    const koniec = () => { if (!skonczone) { skonczone = true; ok(); } };
+    strumien.on('error', e => { bladZapisu = e; koniec(); });
+    req.on('data', d => {
+      if (bladZapisu) return;
+      bajtow += d.length;
+      // Nie zrywamy połączenia — dopiero wtedy klient dostałby błąd sieci
+      // zamiast czytelnego komunikatu. Resztę po prostu wyrzucamy.
+      if (bajtow > LIMIT_B) { zaDuzy = true; return; }
+      strumien.write(d);
+    });
+    req.on('end',   () => strumien.end(koniec));
+    req.on('error', e  => { bladOdczytu = e; strumien.end(koniec); });
+  });
+  if (bladZapisu) {
+    req.resume();
+    await fsp.rm(tymczasowy, { force: true }).catch(() => {});
+    odpowiedz(res, 500, { blad: 'Nie udało się zapisać pliku w magazynie.' }); return null;
+  }
+  if (zaDuzy || bladOdczytu) {
+    await fsp.rm(tymczasowy, { force: true });
+    odpowiedz(res, zaDuzy ? 413 : 400,
+      { blad: zaDuzy ? 'Plik jest za duży. Limit to 25 MB.' : 'Nie udało się odebrać pliku.' }); return null;
+  }
+  if (bajtow === 0) {
+    await fsp.rm(tymczasowy, { force: true });
+    odpowiedz(res, 400, { blad: 'Plik jest pusty.' }); return null;
+  }
+  return { tymczasowy, bajtow };
+}
+
+/* ══ WGRYWANIE MATERIAŁU ═════════════════════════════════════════
+   Kolejność jest ważna:
+     1. plik ląduje pod nazwą tymczasową NA DYSKU CORE,
+     2. dopiero potem zapisujemy metadane (przez RLS),
+     3. jeżeli zapis metadanych się nie uda — kasujemy plik tymczasowy
+        (do magazynu S3 nic jeszcze nie poszło: SIEROTA NIEMOŻLIWA),
+     4. dopiero teraz plik trafia do magazynu; gdy to się nie uda —
+        kasujemy metadane (rekord bez pliku niemożliwy). */
 async function wgrajPlik(req, res, u, sesja){
   // Odrzucając żądanie, najpierw wypijamy jego treść — inaczej klient
   // dostaje zerwane połączenie zamiast czytelnego komunikatu.
@@ -390,48 +458,10 @@ async function wgrajPlik(req, res, u, sesja){
   const sciezka = `kurs/${kurs_id}/${typ}/${bezpiecznaNazwa}`;
   if (!bezpiecznaSciezka(sciezka)) return odrzuc(400, { blad: 'Nieprawidłowa nazwa pliku.' });
 
-  // 1. plik do pliku tymczasowego, z twardym limitem rozmiaru
-  const tymczasowy = path.join(MAGAZYN, '.tmp-' + crypto.randomBytes(8).toString('hex'));
-  try { await fsp.mkdir(MAGAZYN, { recursive: true }); }
-  catch (e) { return odrzuc(500, { blad: 'Magazyn plików jest niedostępny.' }); }
-
-  let bajtow = 0, zaDuzy = false, bladOdczytu = null, bladZapisu = null;
-  let strumien;
-  try { strumien = fs.createWriteStream(tymczasowy); }
-  catch (e) { return odrzuc(500, { blad: 'Magazyn plików jest niedostępny.' }); }
-
-  // Bez tej obsługi każdy błąd zapisu (brak praw, pełny dysk) leciał
-  // jako nieobsłużone zdarzenie i ZABIJAŁ CAŁY SERWER. Teraz kończy
-  // się jednym czytelnym błędem tego jednego żądania.
-  await new Promise(ok => {
-    let skonczone = false;
-    const koniec = () => { if (!skonczone) { skonczone = true; ok(); } };
-    strumien.on('error', e => { bladZapisu = e; koniec(); });
-    req.on('data', d => {
-      if (bladZapisu) return;
-      bajtow += d.length;
-      // Nie zrywamy połączenia — dopiero wtedy klient dostałby błąd sieci
-      // zamiast czytelnego komunikatu. Resztę po prostu wyrzucamy.
-      if (bajtow > LIMIT_B) { zaDuzy = true; return; }
-      strumien.write(d);
-    });
-    req.on('end',   () => strumien.end(koniec));
-    req.on('error', e  => { bladOdczytu = e; strumien.end(koniec); });
-  });
-  if (bladZapisu) {
-    req.resume();
-    await fsp.rm(tymczasowy, { force: true }).catch(() => {});
-    return odpowiedz(res, 500, { blad: 'Nie udało się zapisać pliku w magazynie.' });
-  }
-  if (zaDuzy || bladOdczytu) {
-    await fsp.rm(tymczasowy, { force: true });
-    return odpowiedz(res, zaDuzy ? 413 : 400,
-      { blad: zaDuzy ? 'Plik jest za duży. Limit to 25 MB.' : 'Nie udało się odebrać pliku.' });
-  }
-  if (bajtow === 0) {
-    await fsp.rm(tymczasowy, { force: true });
-    return odpowiedz(res, 400, { blad: 'Plik jest pusty.' });
-  }
+  // 1. plik do pliku tymczasowego
+  const odebrany = await odbierzDoTymczasowego(req, res);
+  if (!odebrany) return;
+  const { tymczasowy, bajtow } = odebrany;
 
   // 2. metadane — przez RLS, w kontekście zalogowanego
   let rekord;
@@ -457,33 +487,72 @@ async function wgrajPlik(req, res, u, sesja){
     return odpowiedz(res, 403, { blad: 'Nie masz uprawnień do tego kursu.' });
   }
 
-  // 4. dopiero teraz plik trafia na docelowe miejsce
+  // 4. dopiero teraz plik trafia do magazynu
   try {
-    await fsp.mkdir(path.dirname(naDysku(sciezka)), { recursive: true });
-    await fsp.rename(tymczasowy, naDysku(sciezka));
+    await magazyn.zapiszZTymczasowego(tymczasowy, sciezka, mime);
   } catch (e) {
     await zapytaj(sesja.uid, `delete from public.material where id=$1`, [rekord.id]).catch(()=>{});
-    await fsp.rm(tymczasowy, { force: true });
+    await fsp.rm(tymczasowy, { force: true }).catch(()=>{});
     return odpowiedz(res, 500, { blad: 'Nie udało się zapisać pliku.' });
   }
   return odpowiedz(res, 200, { material: rekord });
 }
 
+/* ══ WGRYWANIE GŁOSÓWKI (Etap 3) ═════════════════════════════════
+   Ta sama dyscyplina. Klucz S3 buduje Core z identyfikatorów, a baza
+   (ograniczenie `glosowka_klucz_zgodny`) odrzuci każdy, który nie
+   wskazuje dokładnie tej techniki albo etapu — nawet gdyby Core się
+   pomylił. Parametry: technika_id ALBO etap_id, jezyk, plik. */
+async function wgrajGlosowke(req, res, u, sesja){
+  const odrzuc = (kod, dane) => { req.resume(); odpowiedz(res, kod, dane); };
+  const p = await profil(sesja);
+  if (!p) return odrzuc(401, { blad: 'Nie jesteś zalogowany.' });
+
+  const technika_id = u.searchParams.get('technika_id') || null;
+  const etap_id     = u.searchParams.get('etap_id') || null;
+  const jezyk       = (u.searchParams.get('jezyk') || 'th').toLowerCase();
+  const plik        = (u.searchParams.get('plik') || '').trim();
+  const mime        = (req.headers['content-type'] || 'application/octet-stream').split(';')[0];
+  const UUID = /^[0-9a-fA-F-]{36}$/;
+  if ((technika_id ? 1 : 0) + (etap_id ? 1 : 0) !== 1) return odrzuc(400, { blad: 'Podaj technikę ALBO etap.' });
+  if (![technika_id, etap_id].filter(Boolean).every(x => UUID.test(x))) return odrzuc(400, { blad: 'Zły identyfikator.' });
+  if (!DOZWOLONE.audio.includes(mime)) return odrzuc(415, { blad: `Ten format (${mime}) nie jest nagraniem audio.` });
+  if (!/^[a-z]{2}$/.test(jezyk)) return odrzuc(400, { blad: 'Zły kod języka.' });
+
+  const ext = ((plik.match(/\.([A-Za-z0-9]{1,5})$/) || [])[1] || { 'audio/mpeg':'mp3','audio/mp4':'m4a','audio/x-m4a':'m4a','audio/wav':'wav','audio/ogg':'ogg' }[mime] || 'bin').toLowerCase();
+  const id = crypto.randomUUID();
+  const klucz = technika_id ? `glosowka/technika/${technika_id}/${id}.${ext}` : `glosowka/etap/${etap_id}/${id}.${ext}`;
+  if (!magazynMod.RE_GLOSOWKA.test(klucz)) return odrzuc(400, { blad: 'Nieprawidłowy klucz nagrania.' });
+
+  const odebrany = await odbierzDoTymczasowego(req, res);
+  if (!odebrany) return;
+  const { tymczasowy, bajtow } = odebrany;
+
+  let rekord;
+  try {
+    [rekord] = await zapytaj(sesja.uid, `
+      insert into public.glosowka (id, technika_id, etap_id, jezyk_zrodlowy, klucz_s3, mime, rozmiar_b, nagral_id)
+      values ($1,$2,$3,$4,$5,$6,$7,public.uid()) returning id, klucz_s3, jezyk_zrodlowy, mime, rozmiar_b`,
+      [id, technika_id, etap_id, jezyk, klucz, mime, bajtow]);
+  } catch (e) {
+    await fsp.rm(tymczasowy, { force: true });
+    return odpowiedz(res, 403, { blad: czytelnyBlad(e) });
+  }
+  if (!rekord) { await fsp.rm(tymczasowy, { force: true }); return odpowiedz(res, 403, { blad: 'Nie masz uprawnień do tej techniki lub etapu.' }); }
+
+  try { await magazyn.zapiszZTymczasowego(tymczasowy, klucz, mime); }
+  catch (e) {
+    await zapytaj(sesja.uid, `delete from public.glosowka where id=$1`, [rekord.id]).catch(()=>{});
+    await fsp.rm(tymczasowy, { force: true }).catch(()=>{});
+    return odpowiedz(res, 500, { blad: 'Nie udało się zapisać nagrania.' });
+  }
+  return odpowiedz(res, 200, { glosowka: rekord });
+}
+
 /* ══ POBIERANIE PLIKU ════════════════════════════════════════════
    Link jest podpisany i wygasa. Podpis sprawdzamy zawsze — tak samo
    działa podpisany adres w Supabase Storage. */
-async function wydajPlik(res, u){
-  const sciezka = u.searchParams.get('s') || '';
-  if (!bezpiecznaSciezka(sciezka)) return odpowiedz(res, 400, { blad: 'Nieprawidłowa ścieżka.' });
-  if (!linkWazny(sciezka, u.searchParams.get('do'), u.searchParams.get('p')))
-    return odpowiedz(res, 403, { blad: 'Link wygasł albo jest nieprawidłowy.' });
-  const f = naDysku(sciezka);
-  if (!fs.existsSync(f)) return odpowiedz(res, 404, { blad: 'Nie ma takiego pliku.' });
-  res.writeHead(200, { 'Content-Type': 'application/octet-stream',
-                       'Content-Disposition': 'inline; filename="' + path.basename(f) + '"',
-                       'Cache-Control': 'private, no-store' });
-  fs.createReadStream(f).pipe(res);
-}
+async function wydajPlik(res, u){ return magazyn.wydaj(res, u, odpowiedz); }
 
 /* ══ SERWER ══════════════════════════════════════════════════════ */
 const TYPY = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8',
@@ -506,6 +575,10 @@ function zbudujSerwer(sesjaZ){
   if (u.pathname === '/api/material/plik' && req.method === 'POST')
     return wgrajPlik(req, res, u, sesja).catch(() =>
       odpowiedz(res, 500, { blad: 'Nie udało się wgrać pliku.' }));
+
+  if (u.pathname === '/api/glosowka/plik' && req.method === 'POST')
+    return wgrajGlosowke(req, res, u, sesja).catch(() =>
+      odpowiedz(res, 500, { blad: 'Nie udało się wgrać nagrania.' }));
 
   if (u.pathname === '/plik') return wydajPlik(res, u);
 
@@ -537,5 +610,5 @@ function zbudujSerwer(sesjaZ){
 });
 }
 
-return { API, zapytaj, wTransakcji, profil, odpowiedz, zbudujSerwer, toOdmowa, czytelnyBlad };
+return { API, zapytaj, wTransakcji, profil, odpowiedz, zbudujSerwer, toOdmowa, czytelnyBlad, magazyn };
 };

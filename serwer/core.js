@@ -20,7 +20,8 @@
  *   DATABASE_URL, PGSSLROOTCERT           baza (narzedzia/aurora-url.sh api)
  *   COGNITO_REGION, COGNITO_POOL_ID, COGNITO_CLIENT_ID
  *   CORE_ORIGIN                           adres frontu (CORS), np. https://coach.thaimaliwan.pl
- *   SEKRET_LINKOW                         podpis linków do plików
+ *   S3_BUCKET                             magazyn S3 (brak = dysk lokalny); poświadczenia z roli IAM
+ *   SEKRET_LINKOW                         podpis linków do plików (tylko magazyn na dysku)
  *   PORT, CORE_HOST                       domyślnie 8920 na 127.0.0.1; za ALB 0.0.0.0
  *
  * Nie ma tu ANI JEDNEJ reguły uprawnień do danych. Baza decyduje.
@@ -45,8 +46,12 @@ function uruchomCore(opcje = {}) {
   const tozsamosc = opcje.tozsamosc || tozsamoscMod.zeSrodowiska(env);
   const UZYCIE = env.COGNITO_TOKEN_USE || 'access';
 
+  const magazyn = opcje.magazyn || require('./magazyn').zeSrodowiska(env,
+    { katalog: opcje.MAGAZYN || require('path').join(__dirname, '..', 'magazyn', 'materialy'), sekret: SEKRET });
+
   const api = zbudujApi({
-    pool, SEKRET, MAGAZYN: opcje.MAGAZYN,
+    pool, SEKRET, MAGAZYN: opcje.MAGAZYN, magazyn,
+    TMP: env.CORE_TMP || require('os').tmpdir(),   // przy S3 plik tymczasowy zostaje na dysku Core
 
     // Token jest bezstanowy — nie ma czego unieważniać po naszej stronie.
     // Konto wyłączone odpada na `profil()` przy każdym żądaniu, a Cognito
@@ -117,7 +122,7 @@ function uruchomCore(opcje = {}) {
   });
 
   return {
-    serwer: wewnetrzny, api, tozsamosc, weryfikator, pool,
+    serwer: wewnetrzny, api, tozsamosc, weryfikator, pool, magazyn,
     start: () => new Promise(ok => wewnetrzny.listen(PORT, HOST, () => ok(wewnetrzny.address().port))),
     stop:  async () => { await new Promise(ok => wewnetrzny.close(ok)); if (!opcje.pool) await pool.end(); },
   };
